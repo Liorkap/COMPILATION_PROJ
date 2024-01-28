@@ -1,0 +1,20 @@
+<str,Compilation \n\t>
+
+<integernum,0123>
+
+<realnum,0.0>
+
+<realnum,01.01>
+
+<int> <float> <optional> { }
+
+<id,abcd>
+
+)
+
+
+
+
+
+
+<optional>			<id,another> <optional>
