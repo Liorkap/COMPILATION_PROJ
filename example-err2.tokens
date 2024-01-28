@@ -1,0 +1,5 @@
+<str,This a legal string \n>
+<str,Another legal string \t>
+<str,Another legal string \">
+
+Lexical error: '"' in line number 4
