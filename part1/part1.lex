@@ -43,7 +43,7 @@ int|float|void|write|read|optional|while|do|if|then|else|return     printf("<%s>
 {not}                                                               printf("<not,%s>",yytext);
 {str}                                                               printf("<str,%.*s>",(int)yyleng-2,yytext+1);
               
-#([^\n])*                                                           /*eat up comments*/
+#([^\r\n])*                                                         /*eat up comments*/
 
 [ \t\r\n]+                                                          printf("%s",yytext);
 
