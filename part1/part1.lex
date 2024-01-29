@@ -10,7 +10,7 @@
 id            ([A-Za-z])([A-Za-z0-9_])*
 integernum    ([0-9])+
 realnum       ([0-9])+\.([0-9])+
-str           \"([^\"\\\n]|\\(\"|n|t))*\"
+str           \"([^\"\\\r\n]|\\(\"|n|t))*\"
 relop         (==|<>|<|<=|>|>=)
 addop         (\+|\-)
 mulop         (\*|\/)
@@ -45,7 +45,7 @@ int|float|void|write|read|optional|while|do|if|then|else|return     printf("<%s>
               
 #([^\n])*                                                           /*eat up comments*/
 
-[ \t\n]+                                                            printf("%s",yytext);
+[ \t\r\n]+                                                          printf("%s",yytext);
 
 .                                                                   {
                                                                     printf("\nLexical error: '%s' in line number %d\n",yytext,yylineno);
