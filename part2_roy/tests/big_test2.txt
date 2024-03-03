@@ -1,0 +1,33 @@
+void main(argv: void, argc: void) {
+    # Read and Write Operations
+    read(input);
+    write(output);
+    write(result);
+
+    # Arithmetic Expressions
+    a = 10;
+    b = 5;
+    c = a + b * (a - 3) / 2;
+
+    # Conditional Statements
+    if (c > 15) then
+        result = a - b;
+    else
+        result = b - a;
+
+    # Looping Constructs
+    while (a > 0) do {
+        write(a);
+        a = a - 1;
+    }
+
+    fact = factorial(5);
+    write(fact);
+}
+
+# Function Calls
+int factorial(n:int) {
+if (n <= 1) then
+    return 1;
+return n * factorial(n - 1);
+}

@@ -1,0 +1,66 @@
+#void main() {
+void main() {
+    # Variable Declarations
+    a, b, c: int;
+    x, y: float;
+    ch: void;
+
+    # Assignment Statements
+    a = 10;
+    b = a * 2;
+    c = a + b;
+    x = 3.14;
+    y = x * 2.5;
+
+    # Conditional Statements
+    if (a > b) then
+    	if (a < b) then
+        	c = b - a;
+    	else
+        	if (a < b) then
+        		c = b - a;
+    		else
+        		c = 0;
+    else
+	if (a < b) then
+        	if (a < b) then
+        		c = b - a;
+    		else
+        		c = 0;
+    	else
+        	c = 0;
+	
+
+    # Looping Constructs
+    while (a < 20) do {
+        a = a + 1;
+    }
+
+   
+    # Function Calls
+    sum = add(a, b);
+    result = divide(x, y);
+
+
+    # Memory Allocation
+    dynamicArr = malloc(5 * sizeof(a));
+
+    if !(dynamicArr == NULL) then
+        dynamicArr = 0;
+
+    free(dynamicArr);
+
+
+}
+
+ #Function Definitions
+ int add(num1:int, num2:int) {
+      return num1 + num2;
+  }
+
+float divide(num1:float, num2:float) {
+	if (num2 == 0) then
+    		return num1 / num2;
+	return 0;
+}
+

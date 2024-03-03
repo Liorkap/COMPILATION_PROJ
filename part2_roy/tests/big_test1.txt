@@ -1,0 +1,39 @@
+void main(argv: void, argc: void) {
+    a = 10;
+    b = 20;
+    c = a + b;
+    if (c > 15) then
+        write("C is greater than 15.");
+    else
+        write("C is not greater than 15.");
+
+    while (a < 100) do {
+        a = a * 2;
+        if (a == 80) then
+            write("A is 80.");
+    }
+    return;
+}
+
+int add(num1:int, num2:int) {
+    return num1 + num2;
+}
+
+float divide(num1:float, num2:float) {
+    if (num2 == 0.0) then
+        return num1 / num2;
+    else
+        write("Error: Division by zero.");
+        return 0.0;
+}
+
+void printMessage(message:void) {
+    write(message);
+}
+
+int factorial(n:int) {
+    if (n <= 1) then
+        return 1;
+    else
+        return n * factorial(n - 1);
+}

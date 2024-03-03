@@ -1,0 +1,13 @@
+void main(argv: void, argc: void) {
+    num1, num2, num3 : float;
+    num1 = 5..1;
+    num2 = 6;
+    num1 = num2;
+    num3 = someCalculations();
+    num1 = addNumbers(num1, num2, num1+num2, num1*num2);
+
+    id1, id2, id3, id4, id5 : int;
+    id1 = (void) 8 + 5;
+    id1 = (void) num1 * 5;
+    id1 = (void) 8 + 5 + 8 + 9;
+}
