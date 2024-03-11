@@ -1,22 +1,20 @@
 /* C Definitions and declerations*/
-
 %{
 #include <stdio.h>
 #include <iostream>
 #include "part2_helpers.h"
 
-
-void yyerror(const char*);
-extern int yylex();
+void yyerror(const char*); /* Self-implemented error handler */
+extern int yylex(); /* The scanner */
 extern char* yytext;
 extern int yylineno;
 
-
+/* Root of the parsing tree */
 ParserNode* parseTree = NULL;
 
 %}
 
-/*token definitions and associatives*/
+/* Tokens definitions and associatives */
 %token STR ID INTEGERNUM REALNUM 
 %token SEMICOLON COLON
 %token INT FLOAT VOID WRITE READ OPTIONAL WHILE DO RETURN
@@ -32,140 +30,170 @@ ParserNode* parseTree = NULL;
 %right NOT
 %left OPENBRACKET_B CLOSEDBRACKET_B OPENBRACKET_A CLOSEDBRACKET_A
 
-
+/* C-- production rules */
 %%
-/*rules*/
 
-program: fdefs {$$ = makeNode("PROGRAM",NULL,$1); parseTree = $$;}
+ /* Each time our input matches the right hand side of a production rule (we want to perform a reduce operation), */
+ /* we create new nodes for all terminals and symbols in the production and concatenate them. We then create */
+ /* a new root node for all these nodes and assign it to the semantic value of the left hand side of the priduction. */
+ /* This way, we can "propagte" the subtrees further. */
+ /* The semantic values of terminals were created in the lexer file */
+
+ /* Start symbol: a program is a collection of function definitions and declarations */
+program: fdefs { $$ = makeNode("PROGRAM", NULL, $1); parseTree = $$; }
 ;
 
-fdefs: fdefs func_def_api blk {$$ = makeNode("FDEFS",NULL,concatList($1, concatList($2, $3)));}
-       | fdefs func_dec_api {$$ = makeNode("FDEFS",NULL,concatList($1,$2));}
-       | /*epsilon*/ {$$ = makeNode("FDEFS",NULL,makeNode("EPSILON",NULL,NULL));}
+ /* functions: definition {}, declaration; */
+fdefs: fdefs func_def_api blk { $$ = makeNode("FDEFS", NULL, concatList($1, concatList($2, $3))); }
+       | fdefs func_dec_api { $$ = makeNode("FDEFS", NULL, concatList($1, $2)); }
+       | /* epsilon */ { $$ = makeNode("FDEFS", NULL, makeNode("EPSILON", NULL, NULL)); }
 ;
 
-func_dec_api: type ID OPENBRACKET_B CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("FUNC_DEC_API",NULL,concatList($1,concatList($2, concatList($3, concatList($4, $5)))));}
-              | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("FUNC_DEC_API",NULL,concatList($1,concatList($2,concatList($3, concatList($4, concatList($5, $6))))));}
-              | type ID OPENBRACKET_B func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("FUNC_DEC_API",NULL,concatList($1,concatList($2,concatList($3, concatList($4, concatList($5, $6))))));}
-	      | type ID OPENBRACKET_B func_arglist COMMA func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("FUNC_DEC_API",NULL,concatList($1, concatList($2, concatList($3,concatList($4,concatList($5, concatList($6, concatList($7, $8))))))));}
+ /* function declaration: type func(); */
+ /*                       type func(arg1, ... argn : type1, rest of the types...); */
+ /*                       type func(arg1, ... argn : optional type1, rest of the optional types...) */
+ /*                       type func(like 2 and then 3) */
+func_dec_api: type ID OPENBRACKET_B CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("FUNC_DEC_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
+              | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("FUNC_DEC_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, $6)))))); }
+              | type ID OPENBRACKET_B func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("FUNC_DEC_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, $6)))))); }
+	          | type ID OPENBRACKET_B func_arglist COMMA func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("FUNC_DEC_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, concatList($6, concatList($7, $8)))))))); }
 ; 
 
-func_dec_arglist_opt: func_dec_arglist_opt COMMA dcl_opt {$$ = makeNode("FUNC_DEC_ARGLIST_OPT",NULL,concatList($1,concatList($2,$3)));}
-		     | dcl_opt {$$ = makeNode("FUNC_DEC_ARGLIST_OPT",NULL,$1);}
+ /* Function declaration optional arguemnts: optional arguments of type 1, ..., optional arguments of type n */
+func_dec_arglist_opt: func_dec_arglist_opt COMMA dcl_opt { $$ = makeNode("FUNC_DEC_ARGLIST_OPT", NULL, concatList($1, concatList($2, $3))); }
+		              | dcl_opt { $$ = makeNode("FUNC_DEC_ARGLIST_OPT", NULL, $1); }
 ;
 
-dcl_opt: ID COLON OPTIONAL type {$$ = makeNode("DCL_OPT",NULL,concatList($1,concatList($2,concatList($3,$4))));}
-         | ID COLON dcl_opt {$$ = makeNode("DCL_OPT",NULL,concatList($1, concatList($2, $3)));}
+ /* Optional argument without default value: arg1, ..., argn : optional type */
+dcl_opt: ID COLON OPTIONAL type { $$ = makeNode("DCL_OPT",NULL, concatList($1, concatList($2, concatList($3, $4)))); }
+         | ID COMMA dcl_opt { $$ = makeNode("DCL_OPT", NULL, concatList($1, concatList($2, $3))); }
 ;
 
-func_def_api: type ID OPENBRACKET_B CLOSEDBRACKET_B {$$ = makeNode("FUNC_DEF_API",NULL,concatList($1,concatList($2,concatList($3,$4))));}
-	      | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B {$$ = makeNode("FUNC_DEF_API",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
-	      | type ID OPENBRACKET_B func_def_arglist_opt CLOSEDBRACKET_B {$$ = makeNode("FUNC_DEF_API",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
-              | type ID OPENBRACKET_B func_arglist COMMA func_def_arglist_opt CLOSEDBRACKET_B {$$ = makeNode("FUNC_DEF_API",NULL,concatList($1,concatList($2,concatList($3,concatList($4,concatList($5,concatList($6,$7)))))));}
+ /* function definition: type func() */
+ /*                       type func(arg1, ... argn : type1, rest of the types...), */
+ /*                      type func(arg1 = default, ... argn = default : optional type1, rest of the optional types...) */
+ /*                      type func(like 2 and then 3) */
+func_def_api: type ID OPENBRACKET_B CLOSEDBRACKET_B { $$ = makeNode("FUNC_DEF_API", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
+	          | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B { $$ = makeNode("FUNC_DEF_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
+	          | type ID OPENBRACKET_B func_def_arglist_opt CLOSEDBRACKET_B { $$ = makeNode("FUNC_DEF_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
+              | type ID OPENBRACKET_B func_arglist COMMA func_def_arglist_opt CLOSEDBRACKET_B { $$ = makeNode("FUNC_DEF_API", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, concatList($6, $7))))))); }
 ;
 
-func_def_arglist_opt: func_def_arglist_opt COMMA dcl_opt_val {$$ = makeNode("FUNC_DEF_ARGLIST_OPT",NULL,concatList($1,concatList($2,$3)));}
-		      | dcl_opt_val {$$ = makeNode("FUNC_DEF_ARGLIST_OPT",NULL,$1);}
+ /* Function definition arguemnts: optional arguments of type 1, ..., optional arguments of type n */
+func_def_arglist_opt: func_def_arglist_opt COMMA dcl_opt_val { $$ = makeNode("FUNC_DEF_ARGLIST_OPT", NULL, concatList($1, concatList($2, $3))); }
+		              | dcl_opt_val { $$ = makeNode("FUNC_DEF_ARGLIST_OPT", NULL, $1); }
 ;
 
-dcl_opt_val: ID ASSIGN num COLON OPTIONAL type {$$ = makeNode("DCL_OPT_VAL",NULL,concatList($1,concatList($2,concatList($3,concatList($4,concatList($5,$6))))));}
-	     | ID ASSIGN num COMMA dcl_opt_val{$$ = makeNode("DCL_OPT_VAL",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
+ /* Optional argument: arg1 = default, arg2 = default, ..., argn = default : optional type */
+dcl_opt_val: ID ASSIGN num COLON OPTIONAL type { $$ = makeNode("DCL_OPT_VAL", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, $6)))))); }
+	         | ID ASSIGN num COMMA dcl_opt_val { $$ = makeNode("DCL_OPT_VAL", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
 ;
 
-func_arglist: func_arglist COMMA dcl {$$ = makeNode("FUNC_ARGLIST",NULL,concatList($1,concatList($2,$3)));}
-	      | dcl {$$ = makeNode("FUNC_ARGLIST",NULL,$1);}
+ /* Function arguemnts: arguments of type 1, ..., arguments of type n */
+func_arglist: func_arglist COMMA dcl { $$ = makeNode("FUNC_ARGLIST", NULL, concatList($1, concatList($2, $3))); }
+	          | dcl { $$ = makeNode("FUNC_ARGLIST", NULL, $1); }
 ;
 
-
-blk: OPENBRACKET_A stlist CLOSEDBRACKET_A {$$ = makeNode("BLK",NULL,concatList($1,concatList($2,$3)));}
+ /* Block { statements } */
+blk: OPENBRACKET_A stlist CLOSEDBRACKET_A { $$ = makeNode("BLK", NULL, concatList($1, concatList($2, $3))); }
 ;
 
-dcl: ID COLON type {$$ = makeNode("DCL",NULL,concatList($1,concatList($2,$3)));}
-     | ID COMMA dcl {$$ = makeNode("DCL",NULL,concatList($1,concatList($2,$3)));}
+ /* Function arguments of some type: arg1, arg2, ..., argn : type */
+dcl: ID COLON type { $$ = makeNode("DCL", NULL, concatList($1, concatList($2, $3))); }
+     | ID COMMA dcl { $$ = makeNode("DCL", NULL, concatList($1, concatList($2, $3))); }
 ;
 
-type: INT {$$ = makeNode("TYPE",NULL,$1);}
-     | FLOAT {$$ = makeNode("TYPE",NULL,$1);}
-     | VOID {$$ = makeNode("TYPE",NULL,$1);}
+ /* C-- type system */
+type: INT { $$ = makeNode("TYPE", NULL, $1); }
+      | FLOAT { $$ = makeNode("TYPE", NULL, $1); }
+      | VOID { $$ = makeNode("TYPE", NULL, $1); }
 ;
 
-stlist: stlist stmt {$$ = makeNode("STLIST",NULL,concatList($1,$2));}
-        | /*epsilon*/ {$$ = makeNode("STLIST",NULL,makeNode("EPSILON",NULL,NULL));}
+ /* statements */
+stlist: stlist stmt { $$ = makeNode("STLIST", NULL, concatList($1, $2)); }
+        | /* epsilon */ { $$ = makeNode("STLIST", NULL, makeNode("EPSILON", NULL, NULL)); }
 ;
 
-stmt: dcl SEMICOLON {$$ = makeNode("STMT",NULL,concatList($1,$2));}
-      | assn {$$ = makeNode("STMT",NULL,$1);}
-      | exp SEMICOLON {$$ = makeNode("STMT",NULL,concatList($1,$2));}
-      | cntrl {$$ = makeNode("STMT",NULL,$1);}
-      | read {$$ = makeNode("STMT",NULL,$1);}
-      | write {$$ = makeNode("STMT",NULL,$1);}
-      | return {$$ = makeNode("STMT",NULL,$1);}
-      | blk {$$ = makeNode("STMT",NULL,$1);}
+ /* Statement */
+stmt: dcl SEMICOLON { $$ = makeNode("STMT", NULL, concatList($1, $2)); }
+      | assn { $$ = makeNode("STMT", NULL, $1); }
+      | exp SEMICOLON { $$ = makeNode("STMT", NULL, concatList($1, $2)); }
+      | cntrl { $$ = makeNode("STMT", NULL, $1); }
+      | read { $$ = makeNode("STMT", NULL, $1); }
+      | write { $$ = makeNode("STMT", NULL, $1); }
+      | return { $$ = makeNode("STMT", NULL, $1); }
+      | blk { $$ = makeNode("STMT", NULL, $1); }
 ;
 
-return: RETURN exp SEMICOLON {$$ = makeNode("RETURN",NULL,concatList($1, concatList($2,$3)));}
-       | RETURN SEMICOLON {$$ = makeNode("RETURN",NULL,concatList($1,$2));}
+ /* Return statement: return exp;, return; */
+return: RETURN exp SEMICOLON { $$ = makeNode("RETURN", NULL, concatList($1, concatList($2, $3))); }
+        | RETURN SEMICOLON { $$ = makeNode("RETURN", NULL, concatList($1, $2)); }
 ;
 
-write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("WRITE",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
-       | WRITE OPENBRACKET_B STR CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("WRITE",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
-;
-read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON {$$ = makeNode("READ",NULL,concatList($1,concatList($2,concatList($3,concatList($4,$5)))));}
-;
-
-assn: lval ASSIGN exp SEMICOLON {$$ = makeNode("ASSN",NULL,concatList($1,concatList($2,concatList($3,$4))));}
+ /* Write statement: write(identifier); */
+write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("WRITE", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
+       | WRITE OPENBRACKET_B STR CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("WRITE", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
 ;
 
-lval:ID {$$ = makeNode("LVAL",NULL,$1);}
+ /* Read statement: read(identifier); */
+read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON { $$ = makeNode("READ", NULL, concatList($1, concatList($2, concatList($3, concatList($4, $5))))); }
 ;
 
-cntrl: IF bexp THEN stmt ELSE stmt {$$ = makeNode("CNTRL",NULL,concatList($1,concatList($2,concatList($3,concatList($4,concatList($5,$6))))));}
-       | IF bexp THEN stmt {$$ = makeNode("CNTRL",NULL,concatList($1,concatList($2,concatList($3,$4))));}
-       | WHILE bexp DO stmt {$$ = makeNode("CNTRL",NULL,concatList($1,concatList($2,concatList($3,$4))));}
+ /* Assignment statement: identifier = exp; */
+assn: lval ASSIGN exp SEMICOLON { $$ = makeNode("ASSN", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
 ;
 
-bexp: bexp OR bexp {$$ = makeNode("BEXP",NULL,concatList($1, concatList($2,$3)));}
-      | bexp AND bexp {$$ = makeNode("BEXP",NULL,concatList($1, concatList($2,$3)));}
-      | NOT bexp {$$ = makeNode("BEXP",NULL,concatList($1,$2));}
-      | exp RELOP exp {$$ = makeNode("BEXP",NULL,concatList($1, concatList($2,$3)));}
-      | OPENBRACKET_B bexp CLOSEDBRACKET_B {$$ = makeNode("BEXP",NULL,concatList($1, concatList($2,$3)));}
+ /* Left hand side value */
+lval: ID { $$ = makeNode("LVAL", NULL, $1); }
 ;
 
-exp: exp ADDOP exp {$$ = makeNode("EXP",NULL,concatList($1, concatList($2,$3)));}
-     | exp MULOP exp {$$ = makeNode("EXP",NULL,concatList($1, concatList($2,$3)));}
-     | OPENBRACKET_B exp CLOSEDBRACKET_B {$$ = makeNode("EXP",NULL,concatList($1, concatList($2,$3)));}
-     | OPENBRACKET_B type CLOSEDBRACKET_B exp {$$ = makeNode("EXP",NULL,concatList($1,concatList($2,concatList($3,$4))));}
-     | ID {$$ = makeNode("EXP",NULL,$1);};
-     | num {$$ = makeNode("EXP",NULL,$1);};
-     | call {$$ = makeNode("EXP",NULL,$1);};
+ /* Control flow statement */
+cntrl: IF bexp THEN stmt ELSE stmt { $$ = makeNode("CNTRL", NULL, concatList($1, concatList($2, concatList($3, concatList($4, concatList($5, $6)))))); }
+       | IF bexp THEN stmt { $$ = makeNode("CNTRL", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
+       | WHILE bexp DO stmt { $$ = makeNode("CNTRL", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
 ;
 
-num: INTEGERNUM {$$ = makeNode("NUM",NULL,$1);}
-    | REALNUM{$$ = makeNode("NUM",NULL,$1);}
+ /* Boolean experssion: bexp op bexp, ~bexp, (bexp) */
+bexp: bexp OR bexp { $$ = makeNode("BEXP", NULL, concatList($1, concatList($2, $3))); }
+      | bexp AND bexp { $$ = makeNode("BEXP", NULL, concatList($1, concatList($2, $3))); }
+      | NOT bexp { $$ = makeNode("BEXP", NULL, concatList($1, $2)); }
+      | exp RELOP exp { $$ = makeNode("BEXP", NULL, concatList($1, concatList($2, $3))); }
+      | OPENBRACKET_B bexp CLOSEDBRACKET_B { $$ = makeNode("BEXP", NULL, concatList($1, concatList($2, $3))); }
 ;
 
-call: ID OPENBRACKET_B call_args CLOSEDBRACKET_B {$$ = makeNode("CALL",NULL,concatList($1,concatList($2,concatList($3,$4))));}
+ /* Arithmetic expression and function call: exp op exp, (exp), (type)exp, identifier, number, function call */
+exp: exp ADDOP exp { $$ = makeNode("EXP", NULL, concatList($1, concatList($2, $3))); }
+     | exp MULOP exp { $$ = makeNode("EXP", NULL, concatList($1, concatList($2, $3))); }
+     | OPENBRACKET_B exp CLOSEDBRACKET_B { $$ = makeNode("EXP", NULL, concatList($1, concatList($2, $3))); }
+     | OPENBRACKET_B type CLOSEDBRACKET_B exp { $$ = makeNode("EXP", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
+     | ID { $$ = makeNode("EXP", NULL, $1); };
+     | num { $$ = makeNode("EXP", NULL, $1); };
+     | call { $$ = makeNode("EXP", NULL, $1); };
 ;
 
-call_args: call_arglist {$$ = makeNode("CALL_ARGS",NULL,$1);}
-           | /*epsilon*/ {$$ = makeNode("CALL_ARGS",NULL,makeNode("EPSILON",NULL,NULL));}
-;
-call_arglist: call_arglist COMMA exp {$$ = makeNode("CALL_ARGLIST",NULL,concatList($1,concatList($2,$3)));}
-            | exp {$$ = makeNode("CALL_ARGLIST",NULL,$1);}
+ /* Numbers */
+num: INTEGERNUM { $$ = makeNode("NUM", NULL, $1); }
+     | REALNUM{ $$ = makeNode("NUM", NULL, $1); }
 ;
 
+ /* Function call: identifier(args) */
+call: ID OPENBRACKET_B call_args CLOSEDBRACKET_B { $$ = makeNode("CALL", NULL, concatList($1, concatList($2, concatList($3, $4)))); }
+;
 
+ /* Argument list in a function call: (exp, exp, ...) */
+call_args: call_arglist { $$ = makeNode("CALL_ARGS", NULL, $1); }
+           | /* epsilon */ { $$ = makeNode("CALL_ARGS", NULL,makeNode("EPSILON", NULL, NULL)); }
+;
 
-
-
-
+ /* Argument in a function call */
+call_arglist: call_arglist COMMA exp { $$ = makeNode("CALL_ARGLIST", NULL, concatList($1, concatList($2, $3))); }
+              | exp { $$ = makeNode("CALL_ARGLIST", NULL, $1); }
+;
 
 %%
 
-void yyerror(const char*){
- printf("Syntax error: '%s' in line number %d\n",yytext,yylineno);
- exit(2);
+ /* Error handler */
+void yyerror(const char*) {
+    printf("Syntax error: '%s' in line number %d\n", yytext, yylineno);
+    exit(2);
 }
-
-
-
