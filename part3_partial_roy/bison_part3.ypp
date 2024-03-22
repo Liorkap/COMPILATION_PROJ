@@ -265,8 +265,8 @@ return: RETURN exp SEMICOLON {
         | RETURN SEMICOLON { 
 
         /* TO BE COMPLETED 
-      //  we need to put in I0 the function return value
-      //  I0 was chosen hold the return value
+      //  we need to put in I0 the return address from the function somehow I guess.
+      //  I0 was chosen to hold the return address from the function.
          /* TO BE COMPLETED  */
 
         if (currReturnType != void_type) {
@@ -309,15 +309,20 @@ write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON {
 
  /* Read statement: read(identifier); */
 read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON {
-       // allocate a new register to hold the read data
+       // 1. allocate a new register to hold the read data temporarily.
+       // 2. store this new register in the correct memory address of lval -> read(a) is the same like a = number, assignment.
        int reg = currentScopeRegsNum++;
-       if($3.type == int_type)
+       if($3.type == int_type){
 	        buffer->emit("READI I" + to_string(reg));
-       else if($3.type == float_type)
+		buffer->emit("STORI I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
+       }
+       else if($3.type == float_type){
             buffer->emit("READF I" + to_string(reg));
+	    buffer->emit("STORF I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
+       }
        else
             semantic_error("Canno't read a void type");
-
+ 
 }
 ;
 
@@ -330,14 +335,21 @@ assn: lval ASSIGN exp SEMICOLON {
 		else if ($1.type == void_type) {
 			semantic_error("lval argument is of type void, not possible for assignment!");
 		}
-        else if($3.type == void_type){
-            semantic_error("rval argument is of type void, not possible for assignment!");
-        }
+       		else if($3.type == void_type){
+        	       semantic_error("rval argument is of type void, not possible for assignment!");
+       		} // actually, maybe its legal? maybe we can make assignment between void types?
 
-        /* TO BE COMPLETED */
-      //  I think some emits has to be performed here.
-	//	Not sure.
-        /* TO BE COMPLETED */
+		//Store the assignment in the correct memoryAddress of LVAL, if a = b+c so b+c must be stored on the stack frame where 'a' was pushed to.
+		//$1.memAddr holds the offset of 'lval' in the stack frame from the beginning of the frame
+		// $3.regNum is the register that should hold the result of 'exp', should hold b+c for example.
+		if($1.type == int_type){
+			 buffer->emit("STORI I" + to_string($3.regNum) + " I" + to_string($1.memAddr) + " I1"); // I1 is the beginning of the function frame
+		}
+		else{
+		      buffer->emit("STORF I" + to_string($3.regNum) + " I" + to_string($1.memAddr) + " I1");	
+		}
+
+       
 }
 ;
 
@@ -365,10 +377,6 @@ lval: ID {
     $$.str = $1.str;
     $$.type = relevantSymbolTable[$1.str].type;
     $$.memAddr = relevantSymbolTable[$1.str].memAddr;
-
-    /* TO BE COMPLETED */
-  //  maybe some emits has to be performed here, not sure.
-     /* TO BE COMPLETED */
     
 }
 ;
@@ -428,7 +436,8 @@ bexp: bexp OR M bexp {
 
 		// Set UJUMP for backpatch 
 		$$.trueList.push_back(buffer->nextquad() + 2);  
-		
+				
+		// NOTE: FOR EACH RELOP OPERATION WE MUST DETERMINE IF ITS BETWEEN INTEGERS OR FLOAT NUMBERS!		
 		if ($2.str == "==") {
             if($1.type == int_type){
 			    buffer->emit("SEQUI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
