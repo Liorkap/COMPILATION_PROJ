@@ -1,0 +1,684 @@
+/* C/C++ Definitions and declerations*/
+%{
+
+// note: we don't need anymore the helper functions from part2 of the project
+// we only need part3_header which holds buffer and helper methods
+#include "part3_header.hpp"
+
+using namespace std;
+extern int yylex(); /* The scanner */
+extern char* yytext;
+extern int yylineno;
+void yyerror(const char*); /* Self-implemented error handler */
+void operational_error (string errpr);
+void semantic_error(string error);
+
+%}
+
+/* Tokens definitions and associatives */
+%token STR ID INTEGERNUM REALNUM 
+%token SEMICOLON COLON
+%token INT FLOAT VOID WRITE READ OPTIONAL WHILE DO RETURN
+%right IF THEN
+%right ELSE
+%left COMMA
+%right ASSIGN
+%left OR
+%left AND
+%left RELOP
+%left ADDOP
+%left MULOP
+%right NOT
+%left OPENBRACKET_B CLOSEDBRACKET_B OPENBRACKET_A CLOSEDBRACKET_A
+
+/* C-- production rules */
+%%
+
+ /* Each time our input matches the right hand side of a production rule (we want to perform a reduce operation), */
+ /* we create new nodes for all terminals and symbols in the production and concatenate them. We then create */
+ /* a new root node for all these nodes and assign it to the semantic value of the left hand side of the priduction. */
+ /* This way, we can "propagte" the subtrees further. */
+ /* The semantic values of terminals were created in the lexer file */
+
+ /* Start symbol: a program is a collection of function definitions and declarations */
+program: fdefs { /*  TO BE COMPLETED */ }
+;
+
+ /* functions: definition {}, declaration; */
+fdefs: fdefs func_def_api blk { /*  TO BE COMPLETED */ }
+       | fdefs func_dec_api { /*  TO BE COMPLETED */ }
+       | /* epsilon */ { /*  TO BE COMPLETED */ }
+;
+
+ /* function declaration: type func(); */
+ /*                       type func(arg1, ... argn : type1, rest of the types...); */
+ /*                       type func(arg1, ... argn : optional type1, rest of the optional types...) */
+ /*                       type func(like 2 and then 3) */
+func_dec_api: type ID OPENBRACKET_B CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
+              | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B SEMICOLON { /*  TO BE COMPLETED */ }
+              | type ID OPENBRACKET_B func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
+	          | type ID OPENBRACKET_B func_arglist COMMA func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
+; 
+
+ /* Function declaration optional arguemnts: optional arguments of type 1, ..., optional arguments of type n */
+func_dec_arglist_opt: func_dec_arglist_opt COMMA dcl_opt {/*  TO BE COMPLETED */ }
+		              | dcl_opt { /*  TO BE COMPLETED */ }
+;
+
+ /* Optional argument without default value: arg1, ..., argn : optional type */
+dcl_opt: ID COLON OPTIONAL type { /*  TO BE COMPLETED */ }
+         | ID COMMA dcl_opt { /*  TO BE COMPLETED */ }
+;
+
+ /* function definition: type func() */
+ /*                       type func(arg1, ... argn : type1, rest of the types...), */
+ /*                      type func(arg1 = default, ... argn = default : optional type1, rest of the optional types...) */
+ /*                      type func(like 2 and then 3) */
+func_def_api: type ID OPENBRACKET_B CLOSEDBRACKET_B {/*  TO BE COMPLETED */}
+	          | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B { /*  TO BE COMPLETED */ }
+	          | type ID OPENBRACKET_B func_def_arglist_opt CLOSEDBRACKET_B { /*  TO BE COMPLETED */}
+              | type ID OPENBRACKET_B func_arglist COMMA func_def_arglist_opt CLOSEDBRACKET_B {/*  TO BE COMPLETED */ }
+;
+
+ /* Function definition arguemnts: optional arguments of type 1, ..., optional arguments of type n */
+func_def_arglist_opt: func_def_arglist_opt COMMA dcl_opt_val { /*  TO BE COMPLETED */ }
+		              | dcl_opt_val { /*  TO BE COMPLETED */ }
+;
+
+ /* Optional argument: arg1 = default, arg2 = default, ..., argn = default : optional type */
+dcl_opt_val: ID ASSIGN num COLON OPTIONAL type { /*  TO BE COMPLETED */ }
+	         | ID ASSIGN num COMMA dcl_opt_val { /*  TO BE COMPLETED */ }
+;
+
+ /* Function arguemnts: arguments of type 1, ..., arguments of type n */
+func_arglist: func_arglist COMMA dcl { /*  TO BE COMPLETED */ }
+	          | dcl { /*  TO BE COMPLETED */ }
+;
+
+ /* Block { statements } */
+blk: OPENBRACKET_A OPEN_M stlist M CLOSEDBRACKET_A CLOSED_M {
+       buffer->backpatch($3.nextList, $4.quadAddr);
+}
+;
+
+OPEN_M: {
+    // we enter a deeper block, create a new symbolTable and enter it to the symbolTables-STACK
+	// the top of the stack holds the symbol table of the most inner block!
+       symbolTables.push(map<string,Symbol>());
+
+}
+;
+
+CLOSED_M: {
+    //exiting a block, release the memory of the symbolTable that sits on the top of the stack
+        if(!symbolTables.empty()){
+           map<string, Symbol> topMap = symbolTables.top();
+           symbolTables.pop();
+
+           // Clear the contents of the map
+           topMap.clear();
+        }
+}
+;
+
+ /* Function arguments of some type: arg1, arg2, ..., argn : type */
+dcl: ID COLON type {
+      if ($3.type == void_type) {
+		  semantic_error("variable has incompatible type void");
+	  }
+
+      /* TO BE COMPLETED */
+      // here we also need to check that ID doesn't already exists in function parameters
+	  /* TO BE COMPLETED */
+
+
+      //define the token's fields
+	  $$.str = $1.str;
+	  $$.type = $3.type;
+	  $$.memAddr = currMemOffset;
+          $$.width = $3.type; // maybe unneccesary field.
+	  lastMemOffset = currMemOffset;
+
+      map<string, Symbol>& deepestTable = symbolTables.top();
+
+      // symbol already exists in the current block scope, semantic error!
+      if(!deepestTable.empty() && (deepestTable.find($1.str) != deepestTable.end())) {
+          semantic_error("variable already exists in the current block scope");
+      }
+      else{
+	  
+	  	  //symbol doesn't exist, add to the deepest symbolTable
+		  // No memory alignment is needed(not mentioned in the PDF!)
+		  Symbol newSymbol;
+		  newSymbol.type = $3.type;
+		  newSymbol.memAddr = currMemOffset;
+
+		  if($3.type == int_type){
+				currMemOffset += 4;
+		  }
+		  else if($3.type == float_type){
+				 currMemOffset += 8;
+		  }
+		  // insert the symbol to the deepest symbolTable
+		  deepestTable.insert(std::pair<string, Symbol>($1.str, newSymbol));
+      }
+
+}
+     | ID COMMA dcl {
+
+     if ($3.type == void_type) {
+		  semantic_error("variable has incompatible type 'void'");
+	  }
+
+      // here we need to check that ID doesn't already exists in function parameters
+
+      lastMemOffset = currMemOffset;
+
+      //define the token's fields
+	  $$.str = $1.str;
+	  $$.type = $3.type;
+	  $$.memAddr = currMemOffset;
+      	  $$.width = $3.type; // maybe unneccesary field.
+
+      map<string, Symbol>& deepestTable = symbolTables.top();
+
+      // symbol already exists in the current block scope, semantic error!
+      if(!deepestTable.empty() && (deepestTable.find($1.str) != deepestTable.end()) ){
+          semantic_error("variable already exists in the current block scope");
+      }
+      else{
+		  //symbol doesn't exist, add to the deepest symbolTable
+		  // DON'T FORGET TO USE ALIGNED MEMORY ADDRESSES
+		  Symbol newSymbol;
+		  newSymbol.type = $3.type;
+		  newSymbol.memAddr = currMemOffset;
+		  if($3.type == int_type){
+				currMemOffset += 4;
+		  }
+		  else if($3.type == float_type){
+				 currMemOffset += 8;
+		  }
+		  // insert to deepest symbolTable
+		  deepestTable.insert(std::pair<string, Symbol>($1.str, newSymbol));
+      }
+
+}
+;
+
+ /* C-- type system */
+type: INT { 
+   $$.type = int_type;
+}
+      | FLOAT { 
+   $$.type = float_type;
+}
+      | VOID { 
+   $$.type = void_type;
+}
+;
+
+ /* statements */
+stlist: stlist stmt {}
+        | /* epsilon */ {}
+;
+
+ /* Statement */
+stmt: dcl SEMICOLON { 
+        // we declare about couple of variables, for example -> a,b,c,d:float.
+        // we need to increase the stack pointer register in our Riski assembly.
+        // offset in bytes is easy to calculate using currMemOffset and lastMemOffset;
+        // I2 was chosen to be the stack pointer head according to the PDF
+
+		int BytesOffset = currMemOffset - lastMemOffset;
+		buffer->emit("ADD2I I2 I2 " + to_string(BytesOffset));
+}
+
+      | assn {}
+      | exp SEMICOLON {
+          // 
+          if($1.type != void_type){
+              semantic_error("expression type must be void!");
+          }
+      }
+      | cntrl M { 
+        //  cntrl is a "if else" statement, must be backpatched.
+		buffer->backpatch($1.nextList, $2.quadAddr);
+      }
+      | read {}
+      | write {}
+      | return {}
+      | blk {}
+;
+
+ /* Return statement: return exp;, return; */
+return: RETURN exp SEMICOLON {
+        if (currReturnType != $2.type || currReturnType == void_type) {
+			semantic_error("Return type is incorrect");
+		}
+
+         /* TO BE COMPLETED  */
+         // we need to return the value in 'exp' somehow.
+          /* TO BE COMPLETED  */
+
+		buffer->emit("RETRN");
+}
+        | RETURN SEMICOLON { 
+
+        /* TO BE COMPLETED 
+      //  we need to put in I0 the function return value
+      //  I0 was chosen hold the return value
+         /* TO BE COMPLETED  */
+
+        if (currReturnType != void_type) {
+			semantic_error("Canno't return void type of non-void function");
+		}
+		buffer->emit("RETRN");
+        }
+;
+
+ /* Write statement: write(identifier); */
+write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON { 
+        if ($3.type == int_type) {
+			buffer->emit("PRNTI I" + to_string($3.regNum));
+		}
+        else if($3.type == float_type){
+            buffer->emit("PRNTF I" + to_string($3.regNum));
+        }
+        else{
+            semantic_error("expression has non-valid type for printing");
+        }
+ 
+}
+       | WRITE OPENBRACKET_B STR CLOSEDBRACKET_B SEMICOLON { 
+            string str = $3.str;
+            for(int i = 0;i<str.length();i++){
+                 if(str[i] == '\\' && str[i+1] == 'n'){
+                      buffer->emit("PRNTC " + to_string(static_cast<int>('\n')));
+                      i++;
+                 }
+                 else if(str[i] == '\\' && str[i+1] == 't'){
+                      buffer->emit("PRNTC " + to_string(static_cast<int>('\t')));
+                      i++;
+                 }
+                 else{
+                      buffer->emit("PRNTC " + to_string(static_cast<int>(str[i])));
+                 }
+            }
+       }
+;
+
+ /* Read statement: read(identifier); */
+read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON {
+       // allocate a new register to hold the read data
+       int reg = currentScopeRegsNum++;
+       if($3.type == int_type)
+	        buffer->emit("READI I" + to_string(reg));
+       else if($3.type == float_type)
+            buffer->emit("READF I" + to_string(reg));
+       else
+            semantic_error("Canno't read a void type");
+
+}
+;
+
+ /* Assignment statement: identifier = exp; */
+assn: lval ASSIGN exp SEMICOLON { 
+		// both arguments must be of the same type
+		if ($1.type != $3.type) {
+			semantic_error("Argument 1 and Argument 3 has different types for assignment");
+		}
+		else if ($1.type == void_type) {
+			semantic_error("lval argument is of type void, not possible for assignment!");
+		}
+        else if($3.type == void_type){
+            semantic_error("rval argument is of type void, not possible for assignment!");
+        }
+
+        /* TO BE COMPLETED */
+      //  I think some emits has to be performed here.
+	//	Not sure.
+        /* TO BE COMPLETED */
+}
+;
+
+ /* Left hand side value */
+lval: ID {
+    // lval is used ONLY for existing variables in our program
+    // for example - reading into variable or assigning into variable
+    // we must check that ID already exists in the current scope OR in some OUTTER scope!
+
+    bool found = false;
+    stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
+    map<string,Symbol> relevantSymbolTable;
+    for(int i = 0;i<tempStack.size();i++){ // loop through all symbolTables scopes
+        relevantSymbolTable = tempStack.top();
+	tempStack.pop();
+        if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
+            found = true;
+            break;
+        }
+    }
+    if(!found){
+        semantic_error("The variable is not declared in any scope, can't access him");
+    }
+    // the variable ID exists in some scope, WE CHOOSE THE MOST INNER SCOPE!
+    $$.str = $1.str;
+    $$.type = relevantSymbolTable[$1.str].type;
+    $$.memAddr = relevantSymbolTable[$1.str].memAddr;
+
+    /* TO BE COMPLETED */
+  //  maybe some emits has to be performed here, not sure.
+     /* TO BE COMPLETED */
+    
+}
+;
+
+ /* Control flow statement */
+cntrl: IF bexp THEN M stmt ELSE N M stmt {
+        buffer->backpatch($2.trueList, $4.quadAddr);
+		buffer->backpatch($2.falseList, $8.quadAddr);
+		$$.nextList = merge($5.nextList, $6.nextList);
+		$$.nextList = merge($$.nextList, $9.nextList);
+        }
+
+       | IF bexp THEN M stmt { 
+        buffer->backpatch($2.trueList, $4.quadAddr);
+        $$.nextList = merge($2.falseList, $5.nextList);
+       }
+
+       | WHILE M bexp DO M stmt { 
+        buffer->backpatch($3.trueList, $5.quadAddr);
+		buffer->backpatch($6.nextList, $2.quadAddr);
+		$$.nextList = $3.falseList;
+        // add a 'goto M.quadAddr' as learned in lectures
+		buffer->emit("UJUMP " + to_string($2.quadAddr));
+       }
+;
+
+ /* Boolean experssion: bexp op bexp, ~bexp, (bexp) */
+bexp: bexp OR M bexp { 
+        buffer->backpatch($1.falseList, $3.quadAddr);
+		$$.falseList = $4.falseList;
+		$$.trueList = merge($1.trueList, $4.trueList);
+      }
+
+      | bexp AND M bexp {
+        buffer->backpatch($1.trueList, $3.quadAddr);
+		$$.trueList = $4.trueList;
+		$$.falseList = merge($1.falseList, $4.falseList);
+      }
+
+      | NOT bexp { 
+        $$.trueList = $2.falseList;
+		$$.falseList = $2.trueList;
+      }
+
+      | exp RELOP exp { 
+		// check argument compatability
+		if ($1.type != $3.type) {
+			semantic_error("canno't compare between arguments of different types!");
+		}
+		else if ($1.type == void_type || $3.type == void_type) {
+			semantic_error("canno't compare between void types!");
+		}
+		$$.regNum = currentScopeRegsNum++;
+
+		// Set BRANCH INSTRUCTION for backpatch
+		$$.falseList.push_back(buffer->nextquad() + 1);
+
+		// Set UJUMP for backpatch 
+		$$.trueList.push_back(buffer->nextquad() + 2);  
+		
+		if ($2.str == "==") {
+            if($1.type == int_type){
+			    buffer->emit("SEQUI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SEQUF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.str== "<>") {
+            if($1.type == int_type){
+			    buffer->emit("SNEQI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SNEQF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.str== "<=") {
+            if($1.type == int_type){
+			    buffer->emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SGRTF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.str== "<") {
+            if($1.type == int_type){
+			    buffer->emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SLETF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.str== ">=") {
+            if($1.type == int_type){
+			    buffer->emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SLETF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.str== ">") {
+            if($1.type == int_type){
+			    buffer->emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+            else{
+                buffer->emit("SGRTF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+		}
+		buffer->emit("UJUMP ");
+      }
+
+      | OPENBRACKET_B bexp CLOSEDBRACKET_B {
+        $$.trueList = $2.trueList;
+		$$.falseList = $2.falseList;
+      }
+;
+
+ /* Arithmetic expression and function call: exp op exp, (exp), (type)exp, identifier, number, function call */
+exp: exp ADDOP exp { 
+     // check argument compatability
+	 if ($1.type != $3.type) {
+		semantic_error("canno't compare between arguments of different types!");
+	 }
+	 else if ($1.type == void_type || $3.type == void_type) {
+	    semantic_error("canno't compare between void types!");
+	 }
+     $$.regNum = currentScopeRegsNum++;
+     $$.type = $1.type;
+     if($1.type == int_type){
+        if($2.str == "+")
+            buffer->emit("ADD2I " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+        else
+            buffer->emit("SUBTI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+     }
+     else{
+        if($2.str == "+")
+            buffer->emit("ADD2F " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+        else
+            buffer->emit("SUBTF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+     }
+}
+
+     | exp MULOP exp { 
+
+         // check argument compatability
+	     if ($1.type != $3.type) {
+		    semantic_error("canno't compare between arguments of different types!");
+	     }
+	     else if ($1.type == void_type || $3.type == void_type) {
+	        semantic_error("canno't compare between void types!");
+	     }
+         $$.regNum = currentScopeRegsNum++;
+         $$.type = $1.type;
+         if($1.type == int_type){
+            if($2.str == "*")
+                buffer->emit("MULTI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            else
+                buffer->emit("MULTF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+         }
+         else{
+            if($2.str == "*")
+                buffer->emit("DIVDI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            else
+                buffer->emit("DIVDF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+         }
+     }
+
+
+     | OPENBRACKET_B exp CLOSEDBRACKET_B {
+         $$ = $2;
+     }
+     | OPENBRACKET_B type CLOSEDBRACKET_B exp { 
+        if ($2.type != void_type && $4.type == void_type) {
+			semantic_error("can't cast a void type argument into float or int");
+		}
+
+        // I think casting to void like (void)ID is fine
+
+		if ($2.type == $4.type) {
+			$$ = $2;
+		}
+        else{
+          $$.type = $2.type;
+          $$.memAddr = $4.memAddr;
+          $$.regNum = currentScopeRegsNum++;
+          if($2.type == int_type){
+              // A = (int)B
+              buffer->emit("CFTOI I" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
+          }
+          else{
+             // A = (float)B
+              buffer->emit("CITOF I" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
+          }
+        }
+     }
+     | ID { 
+        // again, we use some pre-defined variables
+        // we must check if they exists in some outter or current scope
+
+        bool found = false;
+        std::stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
+        map<string,Symbol> relevantSymbolTable;
+        for(int i = 0;i<tempStack.size();i++){ // loop through all symbolTables scopes
+            relevantSymbolTable = tempStack.top();
+	    tempStack.pop();
+            if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
+                found = true;
+                break;
+            }
+        }
+        if(!found){
+            semantic_error("The variable is not declared in any scope, can't access him");
+        }
+
+        $$.type = relevantSymbolTable[$1.str].type;
+		$$.regNum = currentScopeRegsNum++;
+		$$.memAddr = relevantSymbolTable[$1.str].memAddr;
+		
+        // bring the variable ID from the stack memory
+        // the variable sits in the stack frame
+        if($1.type == int_type)
+		    buffer->emit("LOADI" + to_string($$.type) + " I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
+        else
+            buffer->emit("LOADF" + to_string($$.type) + " I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
+     }
+
+     | num { 
+        // its just a constant number, example: a = 6 + 8;
+        // but we still have to keep this '6' and '8' in some registers
+        // so allocate for them
+        $$.str = $1.str;
+		$$.regNum = currentScopeRegsNum++;
+        $$.type = $1.type;
+        if($1.type == int_type)
+            buffer->emit("COPYI I" + to_string($$.regNum) + " " + $1.str);
+        else
+            buffer->emit("COPYF I" + to_string($$.regNum) + " " + $1.str);
+     }
+
+     | call { 
+        $$.type = $1.type;
+        $$.regNum = $1.regNum;
+        $$.str = $1.str; // if exists, not sure about that.
+     }
+;
+
+ /* Numbers */
+num: INTEGERNUM { 
+    $$.type = int_type;
+	$$.str = $1.str;
+}
+    | REALNUM{
+    $$.type = float_type;
+	$$.str = $1.str;
+    }
+;
+
+ /* Function call: identifier(args) */
+call: ID OPENBRACKET_B call_args CLOSEDBRACKET_B {  /* TO BE COMPLETED */ }
+;
+
+ /* Argument list in a function call: (exp, exp, ...) */
+call_args: call_arglist {  /* TO BE COMPLETED */ }
+           | /* epsilon */ {  /* TO BE COMPLETED */ }
+;
+
+ /* Argument in a function call */
+call_arglist: call_arglist COMMA exp {  /* TO BE COMPLETED */ }
+              | exp {  /* TO BE COMPLETED */ }
+;
+
+M: {$$.quadAddr = buffer->nextquad();}
+;
+
+N: {$$.nextList.push_back(buffer->nextquad()); buffer->emit("UJUMP ");}
+;
+
+%%
+
+int main(int argc, char *argv[]){
+	/* MAIN FUNCTION! TO BE COMPLETED !*/
+	return 0;
+}
+
+ /* Error handler */
+void yyerror(const char * str) {
+    printf("Syntax error: '%s' in line number %d\n", yytext, yylineno);
+    exit(SYNTAX_ERROR);
+}
+
+void semantic_error (string error) {
+	cerr << "Semantic error: " << error << " in line number " << yylineno << endl;
+	exit(SEMANTIC_ERROR);
+}
+
+void operational_error (string error) {
+	cerr << "Operational error: " << error << " in line number " << yylineno << endl;
+	exit(OPERATIONAL_ERROR);
+}
+
+
