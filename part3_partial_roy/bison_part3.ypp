@@ -350,7 +350,7 @@ lval: ID {
     bool found = false;
     stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
     map<string,Symbol> relevantSymbolTable;
-    for(int i = 0;i<tempStack.size();i++){ // loop through all symbolTables scopes
+    for(int i = 0;i<symbolTables.size();i++){ // loop through all symbolTables scopes
         relevantSymbolTable = tempStack.top();
 	tempStack.pop();
         if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
@@ -583,7 +583,7 @@ exp: exp ADDOP exp {
         bool found = false;
         std::stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
         map<string,Symbol> relevantSymbolTable;
-        for(int i = 0;i<tempStack.size();i++){ // loop through all symbolTables scopes
+        for(int i = 0;i<symbolTables.size();i++){ // loop through all symbolTables scopes
             relevantSymbolTable = tempStack.top();
 	    tempStack.pop();
             if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
