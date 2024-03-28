@@ -282,7 +282,7 @@ write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON {
 			buffer->emit("PRNTI I" + to_string($3.regNum));
 		}
         else if($3.type == float_type){
-            buffer->emit("PRNTF I" + to_string($3.regNum));
+            buffer->emit("PRNTF F" + to_string($3.regNum));
         }
         else{
             semantic_error("expression has non-valid type for printing");
@@ -314,11 +314,12 @@ read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON {
        int reg = currentScopeRegsNum++;
        if($3.type == int_type){
 	        buffer->emit("READI I" + to_string(reg));
-		buffer->emit("STORI I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
+			buffer->emit("STORI I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
        }
        else if($3.type == float_type){
-            buffer->emit("READF I" + to_string(reg));
-	    buffer->emit("STORF I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
+            buffer->emit("READF F" + to_string(reg));
+			buffer->emit("CITOF F1 I1");
+			buffer->emit("STORF F" + to_string(reg) + " F" + to_string($1.memAddr) + " F1");
        }
        else
             semantic_error("Canno't read a void type");
@@ -346,7 +347,8 @@ assn: lval ASSIGN exp SEMICOLON {
 			 buffer->emit("STORI I" + to_string($3.regNum) + " I" + to_string($1.memAddr) + " I1"); // I1 is the beginning of the function frame
 		}
 		else{
-		      buffer->emit("STORF I" + to_string($3.regNum) + " I" + to_string($1.memAddr) + " I1");	
+		      buffer->emit("CITOF F1 I1"); // NOTE: I'm not sure if F1 and I1 contains same vals, casting is neeeded?
+		      buffer->emit("STORF F" + to_string($3.regNum) + " F" + to_string($1.memAddr) + " F1");	
 		}
 
        
@@ -444,8 +446,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SEQUF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SEQUF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.str== "<>") {
@@ -454,8 +456,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SNEQF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SNEQF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.str== "<=") {
@@ -464,8 +466,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SGRTF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BNEQZ F" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.str== "<") {
@@ -474,8 +476,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SLETF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.str== ">=") {
@@ -484,8 +486,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SLETF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BNEQZ F" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.str== ">") {
@@ -494,8 +496,8 @@ bexp: bexp OR M bexp {
 			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else{
-                buffer->emit("SGRTF I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+                buffer->emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		}
 		buffer->emit("UJUMP ");
@@ -526,9 +528,9 @@ exp: exp ADDOP exp {
      }
      else{
         if($2.str == "+")
-            buffer->emit("ADD2F " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            buffer->emit("ADD2F " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
         else
-            buffer->emit("SUBTF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            buffer->emit("SUBTF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
      }
 }
 
@@ -547,13 +549,13 @@ exp: exp ADDOP exp {
             if($2.str == "*")
                 buffer->emit("MULTI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
             else
-                buffer->emit("MULTF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+                buffer->emit("DIVDI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
          }
          else{
             if($2.str == "*")
-                buffer->emit("DIVDI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+				buffer->emit("MULTF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
             else
-                buffer->emit("DIVDF " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+                buffer->emit("DIVDF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
          }
      }
 
@@ -577,11 +579,11 @@ exp: exp ADDOP exp {
           $$.regNum = currentScopeRegsNum++;
           if($2.type == int_type){
               // A = (int)B
-              buffer->emit("CFTOI I" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
+              buffer->emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(($$.regNum) - 1));
           }
           else{
              // A = (float)B
-              buffer->emit("CITOF I" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
+              buffer->emit("CITOF F" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
           }
         }
      }
@@ -611,10 +613,12 @@ exp: exp ADDOP exp {
         // bring the variable ID from the stack memory
         // the variable sits in the stack frame
         if($1.type == int_type)
-		    buffer->emit("LOADI" + to_string($$.type) + " I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
-        else
-            buffer->emit("LOADF" + to_string($$.type) + " I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
-     }
+		    buffer->emit("LOADI I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
+        else{
+		    buffer->emit("CITOF F1 I1");// NOTE: cast I1 to F1 again, I think.
+            buffer->emit("LOADF F" + to_string($$.regNum) + " F1 " + to_string($$.memAddr));
+		}
+     }  
 
      | num { 
         // its just a constant number, example: a = 6 + 8;
@@ -626,7 +630,7 @@ exp: exp ADDOP exp {
         if($1.type == int_type)
             buffer->emit("COPYI I" + to_string($$.regNum) + " " + $1.str);
         else
-            buffer->emit("COPYF I" + to_string($$.regNum) + " " + $1.str);
+            buffer->emit("COPYF F" + to_string($$.regNum) + " " + $1.str);
      }
 
      | call { 
