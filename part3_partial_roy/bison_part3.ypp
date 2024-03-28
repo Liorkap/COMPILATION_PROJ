@@ -522,15 +522,15 @@ exp: exp ADDOP exp {
      $$.type = $1.type;
      if($1.type == int_type){
         if($2.str == "+")
-            buffer->emit("ADD2I " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            buffer->emit("ADD2I I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
         else
-            buffer->emit("SUBTI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            buffer->emit("SUBTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
      }
      else{
         if($2.str == "+")
-            buffer->emit("ADD2F " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+            buffer->emit("ADD2F F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
         else
-            buffer->emit("SUBTF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+            buffer->emit("SUBTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
      }
 }
 
@@ -547,15 +547,15 @@ exp: exp ADDOP exp {
          $$.type = $1.type;
          if($1.type == int_type){
             if($2.str == "*")
-                buffer->emit("MULTI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+                buffer->emit("MULTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
             else
-                buffer->emit("DIVDI " + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+                buffer->emit("DIVDI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
          }
          else{
             if($2.str == "*")
-				buffer->emit("MULTF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+				buffer->emit("MULTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
             else
-                buffer->emit("DIVDF " + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+                buffer->emit("DIVDF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
          }
      }
 
