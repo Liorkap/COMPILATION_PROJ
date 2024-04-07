@@ -1,21 +1,23 @@
-/* C/C++ Definitions and declerations*/
+ /* C/C++ Definitions and declarations */
 %{
 
 // note: we don't need anymore the helper functions from part2 of the project
 // we only need part3_header which holds buffer and helper methods
 #include "part3_header.hpp"
 
-using namespace std;
 extern int yylex(); /* The scanner */
 extern char* yytext;
 extern int yylineno;
 void yyerror(const char*); /* Self-implemented error handler */
 void operational_error (string errpr);
 void semantic_error(string error);
+void PrintFunctionTable();
 
 %}
 
-/* Tokens definitions and associatives */
+/***************************************************************************************************************************/
+
+/* Tokens definitions, associativities and precedents */
 %token STR ID INTEGERNUM REALNUM 
 %token SEMICOLON COLON
 %token INT FLOAT VOID WRITE READ OPTIONAL WHILE DO RETURN
@@ -31,6 +33,8 @@ void semantic_error(string error);
 %right NOT
 %left OPENBRACKET_B CLOSEDBRACKET_B OPENBRACKET_A CLOSEDBRACKET_A
 
+/***************************************************************************************************************************/
+
 /* C-- production rules */
 %%
 
@@ -40,641 +44,1002 @@ void semantic_error(string error);
  /* This way, we can "propagte" the subtrees further. */
  /* The semantic values of terminals were created in the lexer file */
 
+ /***************************************************************************************************************************/
+
  /* Start symbol: a program is a collection of function definitions and declarations */
-program: fdefs { /*  TO BE COMPLETED */ }
+program: fdefs { 
+    /** Backpathches functions that are both declared and defined in the current file */
+    for (auto it = functionTable.begin(); it != functionTable.end(); it++) {
+        buffer.backpatch(it->second.calls, it->second.definitionLine);
+    }
+ }
 ;
 
+ /***************************************************************************************************************************/
+
  /* functions: definition {}, declaration; */
-fdefs: fdefs func_def_api blk { /*  TO BE COMPLETED */ }
-       | fdefs func_dec_api { /*  TO BE COMPLETED */ }
-       | /* epsilon */ { /*  TO BE COMPLETED */ }
+fdefs: fdefs func_def_api blk { /** Function definition */
+    /** Resets the globals for the next function (the symbol table clears itself when it leaves a function) */
+    nextFreeIntReg = 2;
+    nextFreeFloatReg = 1;
+    hasDefCreatedScope = false;
+    currentMemOffset = 4;
+
+    /** In case that the user forgot to add a return statement, we will generate one for him. If he did remember then we will never get to those lines */
+    /** Main doesn't return, it halts */
+    if (currentFuncName != "main") {
+	    buffer.emit("LOADI I0 I1 0");
+   	    buffer.emit("RETRN");
+	}
+ }
+
+    /** Function declaration */
+    | fdefs func_dec_api { /** There's nothing to do */ }
+    
+    | /* epsilon */ { /** Nothing to do */ }
 ;
+
+ /***************************************************************************************************************************/
 
  /* function declaration: type func(); */
  /*                       type func(arg1, ... argn : type1, rest of the types...); */
  /*                       type func(arg1, ... argn : optional type1, rest of the optional types...) */
- /*                       type func(like 2 and then 3) */
-func_dec_api: type ID OPENBRACKET_B CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
-              | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B SEMICOLON { /*  TO BE COMPLETED */ }
+ /*                       type func(like 2 and then 3 combined) */
+func_dec_api: type ID OPENBRACKET_B CLOSEDBRACKET_B SEMICOLON {
+        /** Semantic validation */
+        if ($2.value == "main" && $1.type != void_type) {
+            semantic_error("Main function error: the return type of function 'main' must be 'void'");
+        }
+
+        /** We found a new declaration that doesn't exist yet in the function table */
+        if (functionTable.find($2.value) == functionTable.end()) {
+            /** Initializes a new function record with empty parameters list and empty calling lines */
+            Function newFunction;
+            newFunction.returnType = $1.type;
+            newFunction.isDefined = false;
+            functionTable.insert(pair<string, Function>($2.value, newFunction)); /** Inserts the function to the function table. Key - identifier, value - function instance */
+        }
+        /** There's already a declaration with that name */
+        else if (!functionTable[$2.value].isDefined) {
+            semantic_error("Function declaration error: a function called '" + $2.value + "' is already declared");
+        }
+        /** There's already a definition with that name. Checks if the declaration and the definition match */
+        else {
+            if (functionTable[$2.value].returnType != $1.type) {
+                semantic_error("Function declaration-definition error: a function called '" + $2.value + "' has an ambiguous return type"); 
+            }
+            /** The declaration and the definition match */
+            else {
+                /** Possibly linker's stuff */
+            }
+        }
+    }
+    
+    | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B SEMICOLON { 
+        /** Semantic validation */
+        if ($2.value == "main") {
+            semantic_error("Main function error: function 'main' cannot have parameters");
+        }
+
+        /** We found a new declaration that doesn't exist yet in the function table */
+        if (functionTable.find($2.value) == functionTable.end()) {
+            /** Initializes a new function record with a parameters list and empty calling lines */
+            Function newFunction;
+            newFunction.returnType = $1.type;
+            newFunction.isDefined = false;
+            newFunction.paramsTypeList = $4.paramsTypeList;
+            functionTable.insert(pair<string, Function>($2.value, newFunction)); /** Inserts the function to the function table */
+        }
+        /** There's already a declaration with that name */
+        else if (!functionTable[$2.value].isDefined) {
+            semantic_error("Function declaration error: the function '" + $2.value + "' is already declared");
+        } 
+         /** There's already a definition with that name. Checks if the declaration and the definition match */
+        else {
+            if (functionTable[$2.value].returnType != $1.type) {
+                semantic_error("Function declaration-definition error: the function '" + $2.value + "' has an ambiguous return type"); 
+            }
+            else if (!equal(functionTable[$2.value].paramsTypeList.begin(), functionTable[$2.value].paramsTypeList.end(), $4.paramsTypeList.begin())) {
+                semantic_error("Function declaration-definition error: the function '" + $2.value + "' has an ambiguous parameter list"); 
+            }
+            /** The declaration and the definition match */
+            else {
+                /** Possibly linker's stuff */
+            }
+        }
+     }
               | type ID OPENBRACKET_B func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
 	          | type ID OPENBRACKET_B func_arglist COMMA func_dec_arglist_opt CLOSEDBRACKET_B SEMICOLON {/*  TO BE COMPLETED */ }
 ; 
+
+ /***************************************************************************************************************************/
 
  /* Function declaration optional arguemnts: optional arguments of type 1, ..., optional arguments of type n */
 func_dec_arglist_opt: func_dec_arglist_opt COMMA dcl_opt {/*  TO BE COMPLETED */ }
 		              | dcl_opt { /*  TO BE COMPLETED */ }
 ;
 
+ /***************************************************************************************************************************/
+
  /* Optional argument without default value: arg1, ..., argn : optional type */
 dcl_opt: ID COLON OPTIONAL type { /*  TO BE COMPLETED */ }
          | ID COMMA dcl_opt { /*  TO BE COMPLETED */ }
 ;
 
+ /***************************************************************************************************************************/
+
  /* function definition: type func() */
- /*                       type func(arg1, ... argn : type1, rest of the types...), */
+ /*                      type func(arg1, ... argn : type1, rest of the types...), */
  /*                      type func(arg1 = default, ... argn = default : optional type1, rest of the optional types...) */
- /*                      type func(like 2 and then 3) */
-func_def_api: type ID OPENBRACKET_B CLOSEDBRACKET_B {/*  TO BE COMPLETED */}
-	          | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B { /*  TO BE COMPLETED */ }
-	          | type ID OPENBRACKET_B func_def_arglist_opt CLOSEDBRACKET_B { /*  TO BE COMPLETED */}
-              | type ID OPENBRACKET_B func_arglist COMMA func_def_arglist_opt CLOSEDBRACKET_B {/*  TO BE COMPLETED */ }
+ /*                      type func(like 2 and then 3 combined) */
+func_def_api: type ID OPENBRACKET_B CLOSEDBRACKET_B {
+        /** Semantic validation */
+        if ($2.value == "main" && $2.type != void_type) {
+                semantic_error("Main function error: the return type of function 'main' must be 'void'");
+        }
+    
+        /** The definition itself allocates the main scope of the function */
+        symbolTable.AddBlockScope();
+        hasDefCreatedScope = true;
+        currentReturnType = $1.type;
+	    currentFuncName = $2.value;
+
+        /** We found a new declaration that doesn't exist yet in the function table */
+        if (functionTable.find($2.value) == functionTable.end()) {
+            /** Initializes a new function record with a parameters list and empty calling lines */
+            Function newFunction;
+            newFunction.returnType = $1.type;
+            newFunction.isDefined = true;
+            newFunction.definitionLine = buffer.nextquad();
+            functionTable.insert(pair<string, Function>($2.value, newFunction)); /** Inserts the function to the function table */
+        }
+        /** There's already a definition for this function */
+        else if (functionTable[$2.value].isDefined) {
+            semantic_error("Function definition error: the function '" + $2.value + "' is already defined. C-- does not support function overloading");
+        }
+        /** There's already a function declaration for this function. Checks that the return type is the same */
+        else {
+            if (functionTable[$2.value].returnType != $1.type) {
+                semantic_error("Function declaration-definition error: the function '" + $2.value + "' has an ambiguous return type"); 
+            }
+            /** The declaration and the definition match */
+            else {
+                /** Updates the function table */
+                functionTable[$2.value].isDefined = true;
+                functionTable[$2.value].definitionLine = buffer.nextquad();
+            }
+        }
+        
+        /** Saves the return address */
+        buffer.emit("STORI I0 I1 0");
+    }
+    
+    | type ID OPENBRACKET_B func_arglist CLOSEDBRACKET_B { 
+        /** Semantic validation */
+        if ($2.value == "main") {
+            semantic_error("Main function error: function 'main' cannot have parameters");
+        }
+
+        /** The definition itself allocates the main scope of the function */
+        symbolTable.AddBlockScope();
+        hasDefCreatedScope = true;
+        currentReturnType = $1.type;
+	    currentFuncName = $2.value;
+
+        /** There's no definition and no declaration */
+        if (functionTable.find($2.value) == functionTable.end()) {
+            /** Initializes a new function record with a parameters list and empty calling lines */
+            Function newFunction;
+            newFunction.returnType = $1.type;
+            newFunction.isDefined = true;
+            newFunction.paramsTypeList = $4.paramsTypeList;
+            newFunction.definitionLine = buffer.nextquad();
+            functionTable.insert(pair<string, Function>($2.value, newFunction)); /** Inserts the function to the function table */
+
+            /** Adds the parameters to the symbol table */
+            int offsetBelowFramePointer = -8;
+            for (int i = 0; i < $4.paramsList.size(); i++) {
+                symbolTable.AddSymbol($4.paramsList[i], $4.paramsTypeList[i], offsetBelowFramePointer);
+                offsetBelowFramePointer -= 4;
+            }
+        }
+        /** There's already a definition for this function */
+        else if (functionTable[$2.value].isDefined) {
+            semantic_error("Function definition error: the function '" + $2.value + "' is already defined. C-- does not support function overloading");
+        }
+        /** There's already a declaration for this function. Checks that the return type and the parameters type is the same */
+        else {
+            if (functionTable[$2.value].returnType != $1.type) {
+                semantic_error("Function declaration-definition error: the function '" + $2.value + "' has an ambiguous return type"); 
+            }
+            else if (!equal(functionTable[$2.value].paramsTypeList.begin(), functionTable[$2.value].paramsTypeList.end(), $4.paramsTypeList.begin())) {
+                semantic_error("Function declaration-definition error: the function '" + $2.value + "' has an ambiguous parameter list"); 
+            }
+            /** The definition and the declaration match */
+            else {
+                /** Adds the parameters to the symbol table */
+                int offsetBelowFramePointer = -8;
+                for (int i = 0; i < $4.paramsList.size(); i++) {
+                    symbolTable.AddSymbol($4.paramsList[i], $4.paramsTypeList[i], offsetBelowFramePointer);
+                    offsetBelowFramePointer -= 4;
+                }
+            }
+            /** Updates the function table */
+            functionTable[$2.value].isDefined = true;
+            functionTable[$2.value].definitionLine = buffer.nextquad();
+        }
+        
+        /** Saves the return address */
+        buffer.emit("STORI I0 I1 0");
+	PrintFunctionTable();
+    }
+    | type ID OPENBRACKET_B func_def_arglist_opt CLOSEDBRACKET_B { /*  TO BE COMPLETED */}
+    | type ID OPENBRACKET_B func_arglist COMMA func_def_arglist_opt CLOSEDBRACKET_B {/*  TO BE COMPLETED */ }
 ;
+
+ /***************************************************************************************************************************/
 
  /* Function definition arguemnts: optional arguments of type 1, ..., optional arguments of type n */
 func_def_arglist_opt: func_def_arglist_opt COMMA dcl_opt_val { /*  TO BE COMPLETED */ }
 		              | dcl_opt_val { /*  TO BE COMPLETED */ }
 ;
 
+ /***************************************************************************************************************************/
+
  /* Optional argument: arg1 = default, arg2 = default, ..., argn = default : optional type */
 dcl_opt_val: ID ASSIGN num COLON OPTIONAL type { /*  TO BE COMPLETED */ }
 	         | ID ASSIGN num COMMA dcl_opt_val { /*  TO BE COMPLETED */ }
 ;
 
- /* Function arguemnts: arguments of type 1, ..., arguments of type n */
-func_arglist: func_arglist COMMA dcl { /*  TO BE COMPLETED */ }
-	          | dcl { /*  TO BE COMPLETED */ }
-;
+ /***************************************************************************************************************************/
 
- /* Block { statements } */
-blk: OPENBRACKET_A OPEN_M stlist M CLOSEDBRACKET_A CLOSED_M {
-       buffer->backpatch($3.nextList, $4.quadAddr);
-}
-;
-
-OPEN_M: {
-    // we enter a deeper block, create a new symbolTable and enter it to the symbolTables-STACK
-	// the top of the stack holds the symbol table of the most inner block!
-       symbolTables.push(map<string,Symbol>());
-
-}
-;
-
-CLOSED_M: {
-    //exiting a block, release the memory of the symbolTable that sits on the top of the stack
-        if(!symbolTables.empty()){
-           map<string, Symbol> topMap = symbolTables.top();
-           symbolTables.pop();
-
-           // Clear the contents of the map
-           topMap.clear();
+ /* Function parameters: a collection of parameter classes */
+func_arglist: func_arglist COMMA dcl { /** 2nd+ classes*/
+        /** Adds more parameters' types and names */
+        for (int i = 0; i < $3.variablesList.size(); i++) {
+            $$.paramsTypeList.push_back($3.type);
+            $$.paramsList.push_back($3.variablesList[i]);
         }
-}
+    }
+    
+    /** 1st class */
+    | dcl { 
+        $$.paramsList.clear();
+        $$.paramsTypeList.clear();
+        /** Initializes an ordered list of parameters' types and names */
+        for (int i = 0; i < $1.variablesList.size(); i++) {
+            $$.paramsTypeList.push_back($1.type);
+            $$.paramsList.push_back($1.variablesList[i]);
+        }
+    }
 ;
 
- /* Function arguments of some type: arg1, arg2, ..., argn : type */
-dcl: ID COLON type {
-      if ($3.type == void_type) {
-		  semantic_error("variable has incompatible type void");
-	  }
+ /***************************************************************************************************************************/
 
-      /* TO BE COMPLETED */
-      // here we also need to check that ID doesn't already exists in function parameters
-	  /* TO BE COMPLETED */
-
-
-      //define the token's fields
-	  $$.str = $1.str;
-	  $$.type = $3.type;
-	  $$.memAddr = currMemOffset;
-          $$.width = $3.type; // maybe unneccesary field.
-	  lastMemOffset = currMemOffset;
-
-      map<string, Symbol>& deepestTable = symbolTables.top();
-
-      // symbol already exists in the current block scope, semantic error!
-      if(!deepestTable.empty() && (deepestTable.find($1.str) != deepestTable.end())) {
-          semantic_error("variable already exists in the current block scope");
-      }
-      else{
-	  
-	  	  //symbol doesn't exist, add to the deepest symbolTable
-		  // No memory alignment is needed(not mentioned in the PDF!)
-		  Symbol newSymbol;
-		  newSymbol.type = $3.type;
-		  newSymbol.memAddr = currMemOffset;
-
-		  if($3.type == int_type){
-				currMemOffset += 4;
-		  }
-		  else if($3.type == float_type){
-				 currMemOffset += 8;
-		  }
-		  // insert the symbol to the deepest symbolTable
-		  deepestTable.insert(std::pair<string, Symbol>($1.str, newSymbol));
-      }
-
-}
-     | ID COMMA dcl {
-
-     if ($3.type == void_type) {
-		  semantic_error("variable has incompatible type 'void'");
-	  }
-
-      // here we need to check that ID doesn't already exists in function parameters
-
-      lastMemOffset = currMemOffset;
-
-      //define the token's fields
-	  $$.str = $1.str;
-	  $$.type = $3.type;
-	  $$.memAddr = currMemOffset;
-      	  $$.width = $3.type; // maybe unneccesary field.
-
-      map<string, Symbol>& deepestTable = symbolTables.top();
-
-      // symbol already exists in the current block scope, semantic error!
-      if(!deepestTable.empty() && (deepestTable.find($1.str) != deepestTable.end()) ){
-          semantic_error("variable already exists in the current block scope");
-      }
-      else{
-		  //symbol doesn't exist, add to the deepest symbolTable
-		  // DON'T FORGET TO USE ALIGNED MEMORY ADDRESSES
-		  Symbol newSymbol;
-		  newSymbol.type = $3.type;
-		  newSymbol.memAddr = currMemOffset;
-		  if($3.type == int_type){
-				currMemOffset += 4;
-		  }
-		  else if($3.type == float_type){
-				 currMemOffset += 8;
-		  }
-		  // insert to deepest symbolTable
-		  deepestTable.insert(std::pair<string, Symbol>($1.str, newSymbol));
-      }
-
-}
+ /* Block: { statements } */
+blk: OPENBRACKET_A { if (hasDefCreatedScope) hasDefCreatedScope = false; else symbolTable.AddBlockScope(); } stlist M CLOSEDBRACKET_A { symbolTable.RemoveBlockScope(); } {
+       buffer.backpatch($3.nextList, $4.quadAddr);
+    }
 ;
+
+ /***************************************************************************************************************************/
+
+ /* Variables class */
+dcl: ID COLON type { /** Last parameter */
+        /** Semantic validation */
+        /** Void type */
+        if ($3.type == void_type) {
+            semantic_error("Variable declaration error: '" + $1.value + "' is of type 'void'");
+        }
+        /** If the variable is already defined in the current scope */
+        else if (symbolTable.IsExist($1.value)) {
+            semantic_error("Variable declaration error: '" + $1.value + "' is declared in this scope more than once");
+        }
+        /** Adds the variables to dcl symbol */
+        else {
+            $$.variablesList.clear();
+            $$.variablesList.push_back($1.value); /** Adds the identifier to the names list */
+            $$.type = $3.type; /** The type of the declared variables */
+        }
+    }
+
+    | ID COMMA dcl {
+        /** Semantic validation. Void type is checked in the other production rule for dcl */
+        /** The identifier is already exist in this scope */
+        if (symbolTable.IsExist($1.value)) {
+            semantic_error("Variable declaration error: '" + $1.value + "' is declared in this scope more than once");
+        }
+        /** Adds the variables to dcl symbol */
+        else {
+            $$.variablesList.push_back($1.value);
+            $$.variablesList.insert($$.variablesList.end(), $3.variablesList.begin(), $3.variablesList.end());
+		$$.type = $3.type;
+        }
+    }
+;
+
+ /***************************************************************************************************************************/
 
  /* C-- type system */
 type: INT { 
-   $$.type = int_type;
-}
-      | FLOAT { 
-   $$.type = float_type;
-}
-      | VOID { 
-   $$.type = void_type;
-}
+        $$.type = int_type;
+    }
+    
+    | FLOAT { 
+        $$.type = float_type;
+    }
+    
+    | VOID { 
+        $$.type = void_type;
+    }
 ;
 
- /* statements */
-stlist: stlist stmt {}
-        | /* epsilon */ {}
+ /***************************************************************************************************************************/
+
+ /* Statements */
+stlist: stlist stmt { /** There's nothing to do */ }
+    
+    | /* epsilon */ { /** There's nothing to do */ }
 ;
+
+ /***************************************************************************************************************************/
 
  /* Statement */
-stmt: dcl SEMICOLON { 
-        // we declare about couple of variables, for example -> a,b,c,d:float.
-        // we need to increase the stack pointer register in our Riski assembly.
-        // offset in bytes is easy to calculate using currMemOffset and lastMemOffset;
-        // I2 was chosen to be the stack pointer head according to the PDF
-
-		int BytesOffset = currMemOffset - lastMemOffset;
-		buffer->emit("ADD2I I2 I2 " + to_string(BytesOffset));
-}
-
-      | assn {}
-      | exp SEMICOLON {
-          // 
-          if($1.type != void_type){
-              semantic_error("expression type must be void!");
-          }
-      }
-      | cntrl M { 
-        //  cntrl is a "if else" statement, must be backpatched.
-		buffer->backpatch($1.nextList, $2.quadAddr);
-      }
-      | read {}
-      | write {}
-      | return {}
-      | blk {}
-;
-
- /* Return statement: return exp;, return; */
-return: RETURN exp SEMICOLON {
-        if (currReturnType != $2.type || currReturnType == void_type) {
-			semantic_error("Return type is incorrect");
-		}
-
-         /* TO BE COMPLETED  */
-         // we need to return the value in 'exp' somehow.
-          /* TO BE COMPLETED  */
-
-		buffer->emit("RETRN");
-}
-        | RETURN SEMICOLON { 
-
-        /* TO BE COMPLETED 
-      //  we need to put in I0 the return address from the function somehow I guess.
-      //  I0 was chosen to hold the return address from the function.
-         /* TO BE COMPLETED  */
-
-        if (currReturnType != void_type) {
-			semantic_error("Canno't return void type of non-void function");
-		}
-		buffer->emit("RETRN");
+stmt: dcl SEMICOLON { /** Variables declaration */
+        /** Sets an offset for the local variables in the symbol tables */
+        for (int i = 0; i < $1.variablesList.size(); i++) {
+            symbolTable.AddSymbol($1.variablesList[i], $1.type, currentMemOffset);
+            currentMemOffset += 4; /** All variables are 4 bytes long */
         }
+	symbolTable.Print();
+    }
+
+    /** Assignment statement */
+    | assn { /** Done in assignment production rule */ }
+    
+    /** Expression; */
+    | exp SEMICOLON {
+        /** Semantic valdiation */
+        /** Expressions that are derived directly from a statement must be of type void */
+        if ($1.type != void_type) {
+            semantic_error("Statement error: expressions that are not assigned to a variable must be of type 'void'");
+        }
+    }
+    
+    /** Flow control statement */
+    | cntrl M { 
+        /** We now have a wider context - backpatch */
+		buffer.backpatch($1.nextList, $2.quadAddr);
+    }
+    
+    /** Read statement */
+    | read { /** Done in read production rule */ }
+    
+    /** Write statement */
+    | write { /** Done in write production rule */ }
+    
+    /** Return statement */
+    | return { /** Done in return production rule */ }
+    
+    /** Inner block (not the main block of a funciton) */
+    | blk { /** There's nothing to do */ }
 ;
 
- /* Write statement: write(identifier); */
+ /***************************************************************************************************************************/
+
+ /* Return statement: return exp; */
+return: RETURN exp SEMICOLON { 
+        /* Semantic Validation */
+        /** Return type mismatch */
+        if (currentReturnType == void_type) {
+            semantic_error("Return error: the function's return type is void, cannot return a value");
+        }
+        else if (currentReturnType != $2.type) {
+            string neededReturnType = (currentReturnType == int_type) ? "int" : "float";
+            string trueReturnType = ($2.type == int_type) ? "int" : "float";
+			semantic_error("Return error: the function's return type is '" + neededReturnType + "' and you return '" + trueReturnType + "'");
+		}
+
+        /** Code generation */
+        buffer.emit("STORI I" + to_string($2.regNum) + " I1 -4");
+        buffer.emit("LOADI I0 I1 0");
+		buffer.emit("RETRN");
+    }
+    
+    /* return; */
+    | RETURN SEMICOLON { 
+        /** Jumps back */
+        /** Semantic checks */
+        /** Return type mismatch */
+        if (currentReturnType != void_type) {
+			semantic_error("Return error: a non-void function must return a value");
+		}
+
+        /** Code generation */
+        buffer.emit("LOADI I0 I1 0");
+		buffer.emit("RETRN");
+    }
+;
+
+ /***************************************************************************************************************************/
+
+ /* Write statement: write(experssion); */
 write: WRITE OPENBRACKET_B exp CLOSEDBRACKET_B SEMICOLON { 
+        /** Semantic checks and code generation */
         if ($3.type == int_type) {
-			buffer->emit("PRNTI I" + to_string($3.regNum));
+			buffer.emit("PRNTI I" + to_string($3.regNum));
 		}
         else if($3.type == float_type){
-            buffer->emit("PRNTF F" + to_string($3.regNum));
+            buffer.emit("PRNTF F" + to_string($3.regNum));
         }
-        else{
-            semantic_error("expression has non-valid type for printing");
+        else {
+            semantic_error("Write error: cannot print expressions of type 'void'");
         }
  
-}
-       | WRITE OPENBRACKET_B STR CLOSEDBRACKET_B SEMICOLON { 
-            string str = $3.str;
-            for(int i = 0;i<str.length();i++){
-                 if(str[i] == '\\' && str[i+1] == 'n'){
-                      buffer->emit("PRNTC " + to_string(static_cast<int>('\n')));
-                      i++;
-                 }
-                 else if(str[i] == '\\' && str[i+1] == 't'){
-                      buffer->emit("PRNTC " + to_string(static_cast<int>('\t')));
-                      i++;
-                 }
-                 else{
-                      buffer->emit("PRNTC " + to_string(static_cast<int>(str[i])));
-                 }
+    }
+    /** write(string); */
+    | WRITE OPENBRACKET_B STR CLOSEDBRACKET_B SEMICOLON { 
+        /** Gets the string to be printed */
+        string str = $3.value;
+        
+        /** Code generation. Prints char by char */
+        for (int i = 0; i < str.length(); i++){
+            if (str[i] == '\\' && str[i+1] == 'n') { /** newline special treatment */
+                buffer.emit("PRNTC " + to_string(static_cast<int>('\n')));
+                i++;
             }
-       }
+            else if (str[i] == '\\' && str[i+1] == 't') { /** tab special treatment */
+                buffer.emit("PRNTC " + to_string(static_cast<int>('\t')));
+                i++;
+            }
+            else { /** Regular chars */
+                buffer.emit("PRNTC " + to_string(static_cast<int>(str[i])));
+            }
+        }
+    }
 ;
+
+ /***************************************************************************************************************************/
 
  /* Read statement: read(identifier); */
 read: READ OPENBRACKET_B lval CLOSEDBRACKET_B SEMICOLON {
-       // 1. allocate a new register to hold the read data temporarily.
-       // 2. store this new register in the correct memory address of lval -> read(a) is the same like a = number, assignment.
-       int reg = currentScopeRegsNum++;
-       if($3.type == int_type){
-	        buffer->emit("READI I" + to_string(reg));
-			buffer->emit("STORI I" + to_string(reg) + " I" + to_string($1.memAddr) + " I1");
-       }
-       else if($3.type == float_type){
-            buffer->emit("READF F" + to_string(reg));
-			buffer->emit("CITOF F1 I1");
-			buffer->emit("STORF F" + to_string(reg) + " F" + to_string($1.memAddr) + " F1");
-       }
-       else
-            semantic_error("Canno't read a void type");
- 
-}
+        /** First reads to a temp register and then assigns the value to memory, where lval resides */
+        /** The necessary semantic checks have already been done in lval production rule */
+        /** Code generation */
+        /** Reads integer */
+        if ($3.type == int_type) {
+            int reg = nextFreeIntReg++; /** Allocates a new integer register */ 
+            buffer.emit("READI I" + to_string(reg)); /** Reads the data from the user */
+			buffer.emit("STORI I" + to_string(reg) + " I1 " + to_string($3.memOffset)); /** Stores this data */
+        }
+        /** Reads float */
+        else {
+            int reg = nextFreeFloatReg++;  /** Allocates a new floating point register */ 
+            buffer.emit("READF F" + to_string(reg));
+			buffer.emit("STORF F" + to_string(reg) + " F0 " + to_string($3.memOffset)); /** Reminder - F1 holds the equivalent floating point value of I1 */
+        }
+    }
 ;
+
+ /***************************************************************************************************************************/
 
  /* Assignment statement: identifier = exp; */
 assn: lval ASSIGN exp SEMICOLON { 
-		// both arguments must be of the same type
-		if ($1.type != $3.type) {
-			semantic_error("Argument 1 and Argument 3 has different types for assignment");
-		}
-		else if ($1.type == void_type) {
-			semantic_error("lval argument is of type void, not possible for assignment!");
-		}
-       		else if($3.type == void_type){
-        	       semantic_error("rval argument is of type void, not possible for assignment!");
-       		} // actually, maybe its legal? maybe we can make assignment between void types?
-
-		//Store the assignment in the correct memoryAddress of LVAL, if a = b+c so b+c must be stored on the stack frame where 'a' was pushed to.
-		//$1.memAddr holds the offset of 'lval' in the stack frame from the beginning of the frame
-		// $3.regNum is the register that should hold the result of 'exp', should hold b+c for example.
-		if($1.type == int_type){
-			 buffer->emit("STORI I" + to_string($3.regNum) + " I" + to_string($1.memAddr) + " I1"); // I1 is the beginning of the function frame
-		}
-		else{
-		      buffer->emit("CITOF F1 I1"); // NOTE: I'm not sure if F1 and I1 contains same vals, casting is neeeded?
-		      buffer->emit("STORF F" + to_string($3.regNum) + " F" + to_string($1.memAddr) + " F1");	
+		/** Semantic validation */
+        /** Void types */
+		if ($1.type == void_type) {
+            semantic_error("Assignment error: lval argument '" + $1.value + "' is of type 'void'");
+        }
+        else if($3.type == void_type) {
+                semantic_error("Assignment error: rval argument '" + $3.value + "' is of type 'void'");
+        }
+        /** Type mismatch */
+        else if ($1.type != $3.type) {
+			semantic_error("Assignment error: lval argument '" + $1.value + "' and rval argument '" + $3.value + "' are of different types");
 		}
 
-       
-}
+		/** Stores the value of the expression in the memory where the lval resides */
+        if ($1.type == int_type) {
+            buffer.emit("STORI I" + to_string($3.regNum) + " I1 " + to_string($1.memOffset));
+		}
+		else {
+            buffer.emit("STORF F" + to_string($3.regNum) + " F0 " + to_string($1.memOffset));	
+		}   
+    }
 ;
+
+ /***************************************************************************************************************************/
 
  /* Left hand side value */
 lval: ID {
-    // lval is used ONLY for existing variables in our program
-    // for example - reading into variable or assigning into variable
-    // we must check that ID already exists in the current scope OR in some OUTTER scope!
-
-    bool found = false;
-    stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
-    map<string,Symbol> relevantSymbolTable;
-    for(int i = 0;i<symbolTables.size();i++){ // loop through all symbolTables scopes
-        relevantSymbolTable = tempStack.top();
-	tempStack.pop();
-        if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
-            found = true;
-            break;
+        /** Semantic validation */
+        /** Checks if the identifier was defined */
+        Symbol *sym = symbolTable.GetRecord($1.value);
+        if (!sym) {
+            semantic_error("Identifier error: the identifier '" + $1.value + "' is not declared in this scope");
         }
+        
+        /** void type */
+        if (sym->type == void_type) {
+            semantic_error("Identifier error: '" + $1.value + "' is of type void. Cannot assign values to type 'void'");
+        }
+
+        /** The identifier was defined in some scope and has a non-void type */
+        $$.value = $1.value;
+        $$.type = sym->type;
+        $$.memOffset = sym->memOffset;
     }
-    if(!found){
-        semantic_error("The variable is not declared in any scope, can't access him");
-    }
-    // the variable ID exists in some scope, WE CHOOSE THE MOST INNER SCOPE!
-    $$.str = $1.str;
-    $$.type = relevantSymbolTable[$1.str].type;
-    $$.memAddr = relevantSymbolTable[$1.str].memAddr;
-    
-}
 ;
 
- /* Control flow statement */
+ /***************************************************************************************************************************/
+
+ /* Control flow statement. Very similar to what we have seen in class */
 cntrl: IF bexp THEN M stmt ELSE N M stmt {
-        buffer->backpatch($2.trueList, $4.quadAddr);
-		buffer->backpatch($2.falseList, $8.quadAddr);
-		$$.nextList = merge($5.nextList, $6.nextList);
+        buffer.backpatch($2.trueList, $4.quadAddr);
+		buffer.backpatch($2.falseList, $8.quadAddr);
+		$$.nextList = merge($5.nextList, $7.nextList);
 		$$.nextList = merge($$.nextList, $9.nextList);
-        }
+    }
 
-       | IF bexp THEN M stmt { 
-        buffer->backpatch($2.trueList, $4.quadAddr);
+    | IF bexp THEN M stmt { 
+        buffer.backpatch($2.trueList, $4.quadAddr);
         $$.nextList = merge($2.falseList, $5.nextList);
-       }
+    }
 
-       | WHILE M bexp DO M stmt { 
-        buffer->backpatch($3.trueList, $5.quadAddr);
-		buffer->backpatch($6.nextList, $2.quadAddr);
+    | WHILE M bexp DO M stmt { 
+        buffer.backpatch($3.trueList, $5.quadAddr);
+		buffer.backpatch($6.nextList, $2.quadAddr);
 		$$.nextList = $3.falseList;
-        // add a 'goto M.quadAddr' as learned in lectures
-		buffer->emit("UJUMP " + to_string($2.quadAddr));
-       }
+        /** Adds a 'goto M.quadAddr' as learned in lectures */
+		buffer.emit("UJUMP " + to_string($2.quadAddr));
+    }
 ;
 
- /* Boolean experssion: bexp op bexp, ~bexp, (bexp) */
+ /***************************************************************************************************************************/
+
+ /* Boolean experssion: bexp op bexp, ~bexp, (bexp). Very similar to what we have seen in class */
 bexp: bexp OR M bexp { 
-        buffer->backpatch($1.falseList, $3.quadAddr);
+        buffer.backpatch($1.falseList, $3.quadAddr);
 		$$.falseList = $4.falseList;
 		$$.trueList = merge($1.trueList, $4.trueList);
-      }
+    }
 
-      | bexp AND M bexp {
-        buffer->backpatch($1.trueList, $3.quadAddr);
+    | bexp AND M bexp {
+        buffer.backpatch($1.trueList, $3.quadAddr);
 		$$.trueList = $4.trueList;
 		$$.falseList = merge($1.falseList, $4.falseList);
-      }
+    }
 
-      | NOT bexp { 
+    | NOT bexp { 
         $$.trueList = $2.falseList;
 		$$.falseList = $2.trueList;
-      }
+    }
 
-      | exp RELOP exp { 
-		// check argument compatability
-		if ($1.type != $3.type) {
-			semantic_error("canno't compare between arguments of different types!");
-		}
-		else if ($1.type == void_type || $3.type == void_type) {
-			semantic_error("canno't compare between void types!");
-		}
-		$$.regNum = currentScopeRegsNum++;
+    | exp RELOP exp { 
+        /** Semantic validation */
+		/** Void types */
+         if ($1.type == void_type || $3.type == void_type) {
+            semantic_error("Relational error: Cannot perform relational operations on expressions of type 'void'");
+        }
+        /** Different types */
+        if ($1.type != $3.type) { 
+            semantic_error("Relational error: Cannot perform relational operations on expressions of different types");
+        }
 
-		// Set BRANCH INSTRUCTION for backpatch
-		$$.falseList.push_back(buffer->nextquad() + 1);
+		$$.regNum = ($1.type == int_type) ? nextFreeIntReg++ : nextFreeFloatReg++; /** Allocates a register to store the result of the operation */
 
-		// Set UJUMP for backpatch 
-		$$.trueList.push_back(buffer->nextquad() + 2);  
+		/** Sets BRANCH instruction for backpatching */
+		$$.falseList.push_back(buffer.nextquad() + 1);
+
+		/** Set UJUMP instruction for backpatching */
+		$$.trueList.push_back(buffer.nextquad() + 2);  
 				
-		// NOTE: FOR EACH RELOP OPERATION WE MUST DETERMINE IF ITS BETWEEN INTEGERS OR FLOAT NUMBERS!		
-		if ($2.str == "==") {
-            if($1.type == int_type){
-			    buffer->emit("SEQUI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+		/** We must distinguish between floating point operations and integer operations */
+		if ($2.value == "==") {
+            if ($1.type == int_type){
+			    buffer.emit("SEQUI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
-            else{
-                buffer->emit("SEQUF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
-            }
-		} 
-		else if ($2.str== "<>") {
-            if($1.type == int_type){
-			    buffer->emit("SNEQI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
-            }
-            else{
-                buffer->emit("SNEQF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
+            else {
+                buffer.emit("SEQUF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		} 
-		else if ($2.str== "<=") {
-            if($1.type == int_type){
-			    buffer->emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+		else if ($2.value== "<>") {
+            if ($1.type == int_type){
+			    buffer.emit("SNEQI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
-            else{
-                buffer->emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BNEQZ F" + to_string($$.regNum) + " ");
-            }
-		} 
-		else if ($2.str== "<") {
-            if($1.type == int_type){
-			    buffer->emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
-            }
-            else{
-                buffer->emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
+            else {
+                buffer.emit("SNEQF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		} 
-		else if ($2.str== ">=") {
+		else if ($2.value== "<=") {
             if($1.type == int_type){
-			    buffer->emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BNEQZ I" + to_string($$.regNum) + " ");
+			    buffer.emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
-            else{
-                buffer->emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BNEQZ F" + to_string($$.regNum) + " ");
+            else {
+                buffer.emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BNEQZ F" + to_string($$.regNum) + " ");
             }
 		} 
-		else if ($2.str== ">") {
-            if($1.type == int_type){
-			    buffer->emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-			    buffer->emit("BREQZ I" + to_string($$.regNum) + " ");
+		else if ($2.value== "<") {
+            if ($1.type == int_type){
+			    buffer.emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
-            else{
-                buffer->emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer->emit("BREQZ F" + to_string($$.regNum) + " ");
+            else {
+                buffer.emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.value== ">=") {
+            if ($1.type == int_type){
+			    buffer.emit("SLETI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
+            }
+            else {
+                buffer.emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BNEQZ F" + to_string($$.regNum) + " ");
+            }
+		} 
+		else if ($2.value== ">") {
+            if($1.type == int_type){
+			    buffer.emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
+            }
+            else    {
+                buffer.emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
             }
 		}
-		buffer->emit("UJUMP ");
-      }
+		buffer.emit("UJUMP ");
+    }
 
-      | OPENBRACKET_B bexp CLOSEDBRACKET_B {
+    | OPENBRACKET_B bexp CLOSEDBRACKET_B {
         $$.trueList = $2.trueList;
 		$$.falseList = $2.falseList;
-      }
+    }
 ;
 
- /* Arithmetic expression and function call: exp op exp, (exp), (type)exp, identifier, number, function call */
-exp: exp ADDOP exp { 
-     // check argument compatability
-	 if ($1.type != $3.type) {
-		semantic_error("canno't compare between arguments of different types!");
-	 }
-	 else if ($1.type == void_type || $3.type == void_type) {
-	    semantic_error("canno't compare between void types!");
-	 }
-     $$.regNum = currentScopeRegsNum++;
-     $$.type = $1.type;
-     if($1.type == int_type){
-        if($2.str == "+")
-            buffer->emit("ADD2I I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-        else
-            buffer->emit("SUBTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-     }
-     else{
-        if($2.str == "+")
-            buffer->emit("ADD2F F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-        else
-            buffer->emit("SUBTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-     }
-}
+ /***************************************************************************************************************************/
 
-     | exp MULOP exp { 
+ /* Arithmetic expressions and function calls: exp op exp, (exp), (type)exp, identifier, number, function call */
+exp: exp ADDOP exp { /** Addition or subtraction operations */
+        /** Semantic validation */
+        /** Void types */
+         if ($1.type == void_type || $3.type == void_type) {
+            semantic_error("Arithmetic error: cannot perform math operations on expressions of type 'void'");
+        }
+        /** Different types */
+        if ($1.type != $3.type) { 
+            semantic_error("Arithmetic error: cannot perform math operations on expressions of different types");
+        }
 
-         // check argument compatability
-	     if ($1.type != $3.type) {
-		    semantic_error("canno't compare between arguments of different types!");
-	     }
-	     else if ($1.type == void_type || $3.type == void_type) {
-	        semantic_error("canno't compare between void types!");
-	     }
-         $$.regNum = currentScopeRegsNum++;
-         $$.type = $1.type;
-         if($1.type == int_type){
-            if($2.str == "*")
-                buffer->emit("MULTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-            else
-                buffer->emit("DIVDI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
-         }
-         else{
-            if($2.str == "*")
-				buffer->emit("MULTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-            else
-                buffer->emit("DIVDF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-         }
-     }
+        $$.type = $1.type; /** Sets the type of the result */
 
+        /** Code generation */
+        /** Int operation */
+        if ($1.type == int_type) {
+            $$.regNum = nextFreeIntReg++;
+            if ($2.value == "+") /** Addition */
+                buffer.emit("ADD2I I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            else /** Subtraction */
+                buffer.emit("SUBTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+        }
+        /** Float operation */
+        else {
+            $$.regNum = nextFreeFloatReg++;
+            if ($2.value == "+") /** Addition */
+                buffer.emit("ADD2F F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+            else /** Subtraction */
+                buffer.emit("SUBTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+        }
+    }
 
-     | OPENBRACKET_B exp CLOSEDBRACKET_B {
-         $$ = $2;
-     }
-     | OPENBRACKET_B type CLOSEDBRACKET_B exp { 
+    /** Multiplication or division operations */
+    | exp MULOP exp {  
+        /** Semantic validation */
+        /** Void types */
+         if ($1.type == void_type || $3.type == void_type) {
+            semantic_error("Arithmetic error: cannot perform math operations on expressions of type 'void'");
+        }
+        /** Different types */
+        if ($1.type != $3.type) { 
+            semantic_error("Arithmetic error: cannot perform math operations on expressions of different types");
+        }
+
+        $$.type = $1.type; /** Sets the type of the result */
+
+        /** Code generation */
+        /** Int operation */
+        if ($1.type == int_type) {
+            $$.regNum = nextFreeIntReg++;
+            if ($2.value == "*") /** Multiplication */
+                buffer.emit("MULTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+            else /** Division */
+                buffer.emit("DIVDI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
+        }
+        /** Float operation */
+        else {
+            $$.regNum = nextFreeFloatReg++;
+            if ($2.value == "*") /** Multiplication */
+                buffer.emit("MULTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+            else /** Division */
+                buffer.emit("DIVDF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+        }
+    }
+
+    /** () */
+    | OPENBRACKET_B exp CLOSEDBRACKET_B {
+        $$ = $2;
+    }
+     
+    /** Type cast operation */
+    | OPENBRACKET_B type CLOSEDBRACKET_B exp { 
+        /** Semantic validation */
+        /** Casting void to non-void */
         if ($2.type != void_type && $4.type == void_type) {
-			semantic_error("can't cast a void type argument into float or int");
+			semantic_error("Casting error: cannot cast a 'void' type to 'int' or 'float' type");
 		}
-
-        // I think casting to void like (void)ID is fine
-
-		if ($2.type == $4.type) {
+    
+        /** Casting is legal */
+        /** Casting to the same type */
+		else if ($2.type == $4.type) {
 			$$ = $2;
 		}
-        else{
-          $$.type = $2.type;
-          $$.memAddr = $4.memAddr;
-          $$.regNum = currentScopeRegsNum++;
-          if($2.type == int_type){
-              // A = (int)B
-              buffer->emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(($$.regNum) - 1));
-          }
-          else{
-             // A = (float)B
-              buffer->emit("CITOF F" + to_string($$.regNum) + " I" + to_string(($$.regNum) - 1));
-          }
-        }
-     }
-     | ID { 
-        // again, we use some pre-defined variables
-        // we must check if they exists in some outter or current scope
+        
+        /** Casting to a new type */
+        else {
+            $$.type = $2.type; /** Sets the type of the result to the desired type */
 
-        bool found = false;
-        std::stack< map<string,Symbol> > tempStack = symbolTables; // Create a copy of the original stack
-        map<string,Symbol> relevantSymbolTable;
-        for(int i = 0;i<symbolTables.size();i++){ // loop through all symbolTables scopes
-            relevantSymbolTable = tempStack.top();
-	    tempStack.pop();
-            if(relevantSymbolTable.find($1.str) != relevantSymbolTable.end()){
-                found = true;
-                break;
+            if ($2.type == int_type){ 
+                /** A = (int)B */
+                $$.regNum = nextFreeIntReg++;
+                buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string($4.regNum));
+            }
+            else {
+                /** A = (float)B */
+                $$.regNum = nextFreeFloatReg++;
+                buffer.emit("CITOF F" + to_string($$.regNum) + " I" + to_string($4.regNum));
             }
         }
-        if(!found){
-            semantic_error("The variable is not declared in any scope, can't access him");
-        }
+    }
 
-        $$.type = relevantSymbolTable[$1.str].type;
-		$$.regNum = currentScopeRegsNum++;
-		$$.memAddr = relevantSymbolTable[$1.str].memAddr;
+    /** Referring to an identifier */
+    | ID { 
+        /** Semantic validation */
+        /** The identifier is not defined */
+        Symbol *sym = symbolTable.GetRecord($1.value);
+        if (!sym) {
+            semantic_error("Identifier error: the identifier '" + $1.value + "' is not declared in this scope");
+        } 
+        
+        /** The identifier is defined */
+		$$.type = sym->type; /** Sets the type of the expression */
 		
-        // bring the variable ID from the stack memory
-        // the variable sits in the stack frame
-        if($1.type == int_type)
-		    buffer->emit("LOADI I" + to_string($$.regNum) + " I1 " + to_string($$.memAddr));
-        else{
-		    buffer->emit("CITOF F1 I1");// NOTE: cast I1 to F1 again, I think.
-            buffer->emit("LOADF F" + to_string($$.regNum) + " F1 " + to_string($$.memAddr));
+        /** Stores the data in a register by fetching it from memory */
+        if ($$.type == int_type) {
+            $$.regNum = nextFreeIntReg++;
+		    buffer.emit("LOADI I" + to_string($$.regNum) + " I1 " + to_string(sym->memOffset));
+        }
+        else {
+            $$.regNum = nextFreeFloatReg++;
+            buffer.emit("LOADF F" + to_string($$.regNum) + " F0 " + to_string(sym->memOffset));
 		}
      }  
 
-     | num { 
-        // its just a constant number, example: a = 6 + 8;
-        // but we still have to keep this '6' and '8' in some registers
-        // so allocate for them
-        $$.str = $1.str;
-		$$.regNum = currentScopeRegsNum++;
-        $$.type = $1.type;
-        if($1.type == int_type)
-            buffer->emit("COPYI I" + to_string($$.regNum) + " " + $1.str);
-        else
-            buffer->emit("COPYF F" + to_string($$.regNum) + " " + $1.str);
-     }
+    /** Numeric literal */
+    | num { 
+        $$.type = $1.type; /** Sets the type of the expression */
+        
+        /** Stores the data in a register */
+        if ($1.type == int_type) {
+            $$.regNum = nextFreeIntReg++;
+		    buffer.emit("COPYI I" + to_string($$.regNum) + " " + $1.value);
+        }
+        else {
+            $$.regNum = nextFreeFloatReg++;
+            buffer.emit("COPYF F" + to_string($$.regNum) + " " + $1.value);
+		}
+    }
 
-     | call { 
+    /** Function call */
+    | call { 
         $$.type = $1.type;
         $$.regNum = $1.regNum;
-        $$.str = $1.str; // if exists, not sure about that.
-     }
-;
-
- /* Numbers */
-num: INTEGERNUM { 
-    $$.type = int_type;
-	$$.str = $1.str;
-}
-    | REALNUM{
-    $$.type = float_type;
-	$$.str = $1.str;
     }
 ;
 
- /* Function call: identifier(args) */
-call: ID OPENBRACKET_B call_args CLOSEDBRACKET_B {  /* TO BE COMPLETED */ }
+ /***************************************************************************************************************************/
+
+ /* Number literals */
+num: INTEGERNUM { 
+        $$.type = int_type;     /** Sets the type to int */
+        $$.value = $1.value;    /** Sets the numeric value */
+    }
+    | REALNUM {
+        $$.type = float_type;   /** Sets the type to float */
+        $$.value = $1.value;    /** Sets the numeric value */
+    }
 ;
+
+ /***************************************************************************************************************************/
+
+ /* Function call: identifier(args) */
+call: ID OPENBRACKET_B call_args CLOSEDBRACKET_B {  
+    PrintFunctionTable();
+    /** Semantic validation */
+    /** The function wasn't declared or defined before this point */
+    if (functionTable.find($1.value) == functionTable.end()) {
+        semantic_error("Function call error: the function '" + $1.value + "' is not declared or defined before using");
+    }
+    /** Type checking */
+    else if (!equal(functionTable[$1.value].paramsTypeList.begin(), functionTable[$1.value].paramsTypeList.end(), $3.argsTypeList.begin())) {
+        semantic_error("Function call error: wrong number or types of arguments to the function '" + $1.value + "'");
+    }
+    /** Legal call */
+    /** Saves the registers of the calling function (I2+ and F1+, including) */
+    /** Pushes the arguments */
+    /** Leaves 8 bytes for the return address and the return value (both will be filled by the callee) */
+    /** Updates I1 and F0 (frame pointers) */
+    else {
+        int activationListMemOffset = currentMemOffset;
+        /** Saves int registers */
+        for (int i = nextFreeIntReg - 1; i >= 2; i--) {
+            buffer.emit("STORI I" + to_string(i) + " I1 " + to_string(activationListMemOffset));  
+            activationListMemOffset += 4;
+        }
+        /** Saves float registers */
+        for (int i = nextFreeFloatReg - 1; i >= 1; i--) {
+            buffer.emit("STORF F" + to_string(i) + " F0 " + to_string(activationListMemOffset));
+            activationListMemOffset += 4;
+        }
+        /** Passes arguments */
+        for (int i = $3.argsTypeList.size() - 1; i >= 0; i--) {
+            if ($3.argsTypeList[i] == int_type) {
+                buffer.emit("STORI I" + to_string($3.argsRegList[i]) + " I1 " + to_string(activationListMemOffset)); 
+                activationListMemOffset += 4; 
+            }
+            else {
+                buffer.emit("STORI F" + to_string($3.argsRegList[i]) + " F0 " + to_string(activationListMemOffset)); 
+                activationListMemOffset += 4; 
+            }
+        }
+        /** Increases the frame pointers (skips one spot for the return value) */
+        buffer.emit("ADD2I I1 I1 " + to_string(activationListMemOffset + 4));
+        buffer.emit("CITOF F0 I1");
+
+        /** Passes control to the callee */
+        /** We know where to jump */
+        if (functionTable[$1.value].isDefined) {
+            buffer.emit("JLINK " + to_string(functionTable[$1.value].definitionLine));
+        }
+        /** We don't know where to jump yet. We will backpatch it later or let the linker handle this */
+        else {
+            functionTable[$1.value].calls.push_back(buffer.nextquad());
+            buffer.emit("JLINK ");
+        }
+
+        /** Returns from the call */
+        /** Restores the registers (-8 to skip the return address and the return value and the rest is to skip the arguments) */
+        int regOffset = -8 - $3.argsTypeList.size() * 4;
+        /** Float registers */
+        for (int i = 1; i <= nextFreeFloatReg - 1; i++) {
+            buffer.emit("LOADF F" + to_string(i) + " F0 " + to_string(regOffset)); 
+            regOffset -= 4;
+        } 
+        /** Int registers */
+        for (int i = 2; i <= nextFreeIntReg - 1; i++) {
+            buffer.emit("LOADI I" + to_string(i) + " I1 " + to_string(regOffset)); 
+            regOffset -= 4;
+        } 
+        /** Gets the return value */
+        $$.type = functionTable[$1.value].returnType; 
+        if ($$.type == int_type) {
+            $$.regNum = nextFreeIntReg++;
+            buffer.emit("LOADI I" + to_string($$.regNum) + " I1 -4");
+        }
+        else if ($$.type == float_type) {
+            $$.regNum = nextFreeFloatReg++;
+            buffer.emit("LOADI F" + to_string($$.regNum) + " F0 -4");
+        }
+
+        /** restores I1 and F0 */
+        buffer.emit("ADD2I I1 I1 " + to_string(-activationListMemOffset - 4));
+        buffer.emit("CITOF F0 I1");
+    }
+ }
+;
+
+ /***************************************************************************************************************************/
 
  /* Argument list in a function call: (exp, exp, ...) */
-call_args: call_arglist {  /* TO BE COMPLETED */ }
-           | /* epsilon */ {  /* TO BE COMPLETED */ }
+call_args: call_arglist { /** Non-empty argument list */
+        $$.argsTypeList = $1.argsTypeList;
+        $$.argsRegList = $1.argsRegList;
+    }
+    
+    | /* epsilon */ {  
+        /** Cleans any former arguments */
+        $$.argsRegList.clear(); 	
+    	$$.argsTypeList.clear();
+    }
 ;
 
- /* Argument in a function call */
-call_arglist: call_arglist COMMA exp {  /* TO BE COMPLETED */ }
-              | exp {  /* TO BE COMPLETED */ }
+ /***************************************************************************************************************************/
+
+ /* Arguments of a function call */
+call_arglist: call_arglist COMMA exp { /** 2nd+ values */
+        $$.argsTypeList = $1.argsTypeList;
+        $$.argsTypeList.push_back($3.type);
+        $$.argsRegList = $1.argsRegList;
+        $$.argsRegList.push_back($3.regNum);
+    }
+    
+    | exp { /** 1st value */
+        $$.argsRegList.clear(); 	
+    	$$.argsTypeList.clear();
+        $$.argsTypeList.push_back($1.type);
+        $$.argsRegList.push_back($1.regNum);
+    }
 ;
 
-M: {$$.quadAddr = buffer->nextquad();}
-;
+ /***************************************************************************************************************************/
 
-N: {$$.nextList.push_back(buffer->nextquad()); buffer->emit("UJUMP ");}
-;
+/** M marker. Remembers line number. Must be backpatched */
+M: { $$.quadAddr = buffer.nextquad(); };
+
+ /***************************************************************************************************************************/
+
+/** N marker. Generates a jump command manually in case some block of statements lacks a nextlist. Must be backpatched */
+N: { $$.nextList.push_back(buffer.nextquad()); buffer.emit("UJUMP "); };
 
 %%
 
+ /***************************************************************************************************************************/
+
+
 int main(int argc, char *argv[]){
-	/* MAIN FUNCTION! TO BE COMPLETED !*/
+	if (argc != 2) {
+		operational_error("Input error: exactly one input file path should be inserted");
+	}
+	string inputFileName = argv[1];
+
+	extern FILE *yyin;
+	yyin = fopen(argv[1], "r");
+	if (yyin == NULL) {
+		operational_error("Input error: input file could not be openned");
+	}
+	
+	size_t lastIndexDot = inputFileName.find_last_of(".");
+	if (inputFileName.substr(lastIndexDot) != ".cmm") {
+		operational_error("Input error: input files must have .cmm extension");
+	}
+
+    yyparse();
+
+	ofstream rskFile;
+	string outputFileName = inputFileName.substr(0, lastIndexDot) + ".rsk";
+	size_t found = outputFileName.find_last_of("/\\");
+	outputFileName = outputFileName.substr(found + 1);
+	rskFile.open(outputFileName.c_str());
+    if (!rskFile.is_open()) {
+        operational_error("Output error: output file could not be created");
+    }
+    /** Constructs the linker's header */
+    rskFile << "<header>\n<unimplemented>\n<implemented>";
+    for (auto it = functionTable.begin(); it != functionTable.end(); it++) {
+        rskFile << " ";
+        rskFile << it->first;
+        rskFile << ",";
+        rskFile << it->second.definitionLine;
+    }
+    rskFile << "\n</header>\n";
+    rskFile << buffer.print();
+	rskFile.close();
 	return 0;
 }
 
@@ -684,14 +1049,27 @@ void yyerror(const char * str) {
     exit(SYNTAX_ERROR);
 }
 
-void semantic_error (string error) {
+void semantic_error(string error) {
 	cerr << "Semantic error: " << error << " in line number " << yylineno << endl;
 	exit(SEMANTIC_ERROR);
 }
 
-void operational_error (string error) {
-	cerr << "Operational error: " << error << " in line number " << yylineno << endl;
+void operational_error(string error) {
+	cerr << "Operational error: " << error << endl;
 	exit(OPERATIONAL_ERROR);
 }
 
+/**
+ * @brief Prints the function table. For debugging
+ */
+void PrintFunctionTable() {
+	cout << "funcs: " << functionTable.size() << ". ";
+	for (auto func = functionTable.begin(); func != functionTable.end(); func++) {
+        	cout << "name: " << func->first << " ret type: " << func->second.returnType << " is defined: " << func->second.isDefined << " definition line: " << func->second.definitionLine << " params: ";
+			for (int i = 0; i < func->second.paramsTypeList.size(); i++) {
+				cout << func->second.paramsTypeList[i] << " ";
+			}
+			cout << "\n";
+	}
+}
 

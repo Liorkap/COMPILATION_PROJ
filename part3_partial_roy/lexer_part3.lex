@@ -26,9 +26,9 @@ not           (!)
 
 %%
 
- /* For each token we match, the semantic value that is passed to Bison 
+ /* For each token we match, the semantic value is passed to Bison using yylval.
     NOTE: the part2 helpers like makeNode are not neccesary anymore 
-   we instead just return the string for each token, yylval.str = yytext */
+    we instead just return the string for each token, yylval.str = yytext */
 
 
 int                     {  return INT; }
@@ -61,35 +61,35 @@ return                  {  return RETURN; }
 
 [{]                     {  return OPENBRACKET_A; }
 
-[}]	                {  return CLOSEDBRACKET_A; }
+[}]	                  {  return CLOSEDBRACKET_A; }
 
-[,]	                {  return COMMA; }
+[,]	                  {  return COMMA; }
 
 [;]                     {  return SEMICOLON; }
 
 [:]                     {  return COLON; }
                                                          
-{id}                    { yylval.str = strdup(yytext); return ID; }
+{id}                    { yylval.value = strdup(yytext); return ID; }
 
-{integernum}            { yylval.str = strdup(yytext); return INTEGERNUM; }
+{integernum}            { yylval.value = strdup(yytext); return INTEGERNUM; }
 
-{realnum}               { yylval.str = strdup(yytext); return REALNUM; }
+{realnum}               { yylval.value = strdup(yytext); return REALNUM; }
 
-{relop}                 { yylval.str =  strdup(yytext); return RELOP; }
+{relop}                 { yylval.value =  strdup(yytext); return RELOP; }
 
-{addop}                 { yylval.str =  strdup(yytext); return ADDOP; }
+{addop}                 { yylval.value =  strdup(yytext); return ADDOP; }
 
-{mulop}                 { yylval.str =  strdup(yytext); return MULOP; }
+{mulop}                 { yylval.value =  strdup(yytext); return MULOP; }
 
-{assign}                { yylval.str =  strdup(yytext); return ASSIGN; }
+{assign}                { yylval.value =  strdup(yytext); return ASSIGN; }
 
-{and}                   { yylval.str =  strdup(yytext); return AND; }
+{and}                   { yylval.value =  strdup(yytext); return AND; }
 
-{or}                    { yylval.str =  strdup(yytext); return OR; }
+{or}                    { yylval.value =  strdup(yytext); return OR; }
 
-{not}                   { yylval.str =  strdup(yytext); return NOT; }
+{not}                   { yylval.value =  strdup(yytext); return NOT; }
 
-{str}                   { yytext[yyleng-1] = '\0'; yylval.str = strdup((yytext+1)); return STR; }
+{str}                   { yytext[yyleng-1] = '\0'; yylval.value = strdup((yytext+1)); return STR; }
 
 #([^\r\n])*             /* eat up comments */
 

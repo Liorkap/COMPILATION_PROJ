@@ -1,7 +1,7 @@
-# Makefile for part2 - parser
-all: part3
+# Makefile for part3
+all: rx-cc
 
-part3: lex.yy.o bison_part3.tab.o part3_implementation.o
+rx-cc: lex.yy.o bison_part3.tab.o part3_implementation.o
 	g++ -std=c++11 -o $@ $^
 
 lex.yy.o: lex.yy.c part3_header.hpp bison_part3.tab.hpp 
