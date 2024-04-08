@@ -647,13 +647,23 @@ bexp: bexp OR M bexp {
             semantic_error("Relational error: Cannot perform relational operations on expressions of different types");
         }
 
-		$$.regNum = ($1.type == int_type) ? nextFreeIntReg++ : nextFreeFloatReg++; /** Allocates a register to store the result of the operation */
+		$$.regNum = nextFreeIntReg++; /** Allocates a register to store the result of the operation */
 
-		/** Sets BRANCH instruction for backpatching */
-		$$.falseList.push_back(buffer.nextquad() + 1);
+		 /** We add a different amount of operations, depending on the type */
+        if ($1.type == int_type) {
+            /** Sets BRANCH instruction for backpatching */
+            $$.falseList.push_back(buffer.nextquad() + 1);
 
-		/** Set UJUMP instruction for backpatching */
-		$$.trueList.push_back(buffer.nextquad() + 2);  
+            /** Set UJUMP instruction for backpatching */
+            $$.trueList.push_back(buffer.nextquad() + 2);  
+        }
+        else {
+            /** Sets BRANCH instruction for backpatching */
+            $$.falseList.push_back(buffer.nextquad() + 2);
+
+            /** Set UJUMP instruction for backpatching */
+            $$.trueList.push_back(buffer.nextquad() + 3);  
+        }
 				
 		/** We must distinguish between floating point operations and integer operations */
 		if ($2.value == "==") {
@@ -662,8 +672,10 @@ bexp: bexp OR M bexp {
 			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else {
-                buffer.emit("SEQUF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SEQUF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+                buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+                buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.value== "<>") {
@@ -672,8 +684,10 @@ bexp: bexp OR M bexp {
 			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else {
-                buffer.emit("SNEQF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SNEQF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+                buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.value== "<=") {
@@ -682,8 +696,10 @@ bexp: bexp OR M bexp {
 			    buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
             else {
-                buffer.emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BNEQZ F" + to_string($$.regNum) + " ");
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SGRTF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+                buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+			    buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.value== "<") {
@@ -692,8 +708,10 @@ bexp: bexp OR M bexp {
 			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
             else {
-                buffer.emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SLETF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));              
+		buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.value== ">=") {
@@ -702,8 +720,10 @@ bexp: bexp OR M bexp {
 			    buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
             else {
-                buffer.emit("SLETF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BNEQZ F" + to_string($$.regNum) + " ");
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SLETF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+                buffer.emit("BNEQZ I" + to_string($$.regNum) + " ");
             }
 		} 
 		else if ($2.value== ">") {
@@ -711,9 +731,11 @@ bexp: bexp OR M bexp {
 			    buffer.emit("SGRTI I" + to_string($$.regNum) + " I" + to_string($1.regNum) + " I" + to_string($3.regNum));
 			    buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
-            else    {
-                buffer.emit("SGRTF F" + to_string($$.regNum) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
-			    buffer.emit("BREQZ F" + to_string($$.regNum) + " ");
+            else {
+                int tempFloatReg = nextFreeFloatReg++;
+                buffer.emit("SGRTF F" + to_string(tempFloatReg) + " F" + to_string($1.regNum) + " F" + to_string($3.regNum));
+			    buffer.emit("CFTOI I" + to_string($$.regNum) + " F" + to_string(tempFloatReg));
+                buffer.emit("BREQZ I" + to_string($$.regNum) + " ");
             }
 		}
 		buffer.emit("UJUMP ");
